@@ -302,4 +302,4 @@ Copyright (c) 2026 Richie Flicker. Released under the **MIT licence** ([LICENSE]
 
 In plain words: you and anyone else may use, copy, change, share and even sell Kitsune Review, as long as the
 copyright notice and the licence text stay with it. It comes with no warranty. Every source file carries an SPDX line
-(`SPDX-License-Identifier: MIT`) and the copyright notice. The package stays marked `private` until it is published to npm.
+(`SPDX-License-Identifier: MIT`) and the copyright notice. The package is set up for npm (`kitsune-review`, public access) but has not been published yet.

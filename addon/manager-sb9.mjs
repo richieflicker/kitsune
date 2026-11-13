@@ -73,12 +73,12 @@ function KitsuneProvider({ store, openTab }) {
     return sum.pending > 0 ? `${sum.pending} to review · ${sum.unchanged + sum.new + sum.accepted} ok` : `All ${sum.total} snapshots match`;
   })();
 
-  const button = { cursor: 'pointer', font: 'inherit', fontSize: 12, padding: '4px 10px', borderRadius: 6, border: '1px solid currentColor', background: 'transparent', color: 'inherit' };
+  const button = { cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6, border: '1px solid currentColor', background: 'transparent', color: 'inherit' };
   return React.createElement(
     'div',
-    { style: { padding: '6px 0', fontSize: 12, lineHeight: 1.4 } },
-    React.createElement('div', { style: { fontWeight: 600, marginBottom: 2 } }, 'Visual tests (Kitsune)'),
-    React.createElement('div', { style: { opacity: 0.8, marginBottom: 8 } }, err || line),
+    { style: { padding: '12px 14px 10px', fontSize: 13, lineHeight: '18px', borderBottom: '1px solid rgba(128,128,128,.2)' } },
+    React.createElement('div', { style: { fontWeight: 700, marginBottom: 4 } }, 'Visual tests (Kitsune)'),
+    React.createElement('div', { style: { opacity: 0.75, fontSize: 12, marginBottom: 10 } }, err || line),
     React.createElement(
       'div',
       { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },

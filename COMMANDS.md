@@ -69,6 +69,19 @@ Prints the build and the summary counts from the last `check`.
 
 ---
 
+### Local server API
+
+`kitsune serve` exposes a small JSON API that the dashboard and the Storybook testing panel use:
+
+| Call | What it does |
+| --- | --- |
+| `GET /api/build` | Result of the last check. |
+| `POST /api/run` | Start a check in the background (409 if one is already running). |
+| `GET /api/run` | Progress (`running`, `done`, `total`, `error`) plus the last summary. |
+| `POST /api/approve`, `POST /api/reject` | Review changed stories (`key`, `keys` or `all`). |
+
+Every `POST` must send `x-requested-with: kitsune`. Cross-origin calls are only accepted from `localhost` / `127.0.0.1` pages, such as Storybook on port 6006.
+
 ## Shared server (web approvals for a team / CI)
 
 Use this when CI runs the check and people approve from a browser. It needs Node 22.13 or newer.
