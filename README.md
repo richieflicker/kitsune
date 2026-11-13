@@ -159,6 +159,7 @@ If the address is a shared review server, the block shows a locked state with a 
 
 - It talks to `kitsune serve`, so keep that running (`npm run kitsune:serve`). If it is not reachable the panel says so.
 - Browsers on other origins cannot call it: only `localhost`/`127.0.0.1` pages are allowed, and every POST needs an `x-requested-with: kitsune` header.
+- To sign in inside the Storybook tab, the dashboard and Storybook must be on the same *site*: the sign-in cookie is `SameSite=Strict`. On your own machine the addon handles this for you (it swaps `127.0.0.1` for `localhost`, or the reverse, to match the address Storybook is open on). For a deployed setup use hostnames under one parent domain, such as `storybook.example.com` and `kitsune.example.com`; otherwise open the review server in its own browser tab.
 - Storybook 8 keeps the tab only. Storybook 9.1+ and 10 get the testing-panel block.
 
 ## GitHub pull request check
