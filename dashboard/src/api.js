@@ -16,7 +16,7 @@ export const getBuild = () => request('/api/build');
 export const act = (action, payload) =>
   request(`/api/${action}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-requested-with': 'kitsune' },
     body: JSON.stringify(payload),
   });
 

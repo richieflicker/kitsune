@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { review } from './check.js';
+import { review, runCheck } from './check.js';
 import { createStore } from './store.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,8 +21,17 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
+/** Only pages served from this machine (Storybook on localhost:6006, say) may call the API cross-origin. */
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+
 function send(res, status, body, type = 'application/json') {
-  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+  const headers = { 'Content-Type': type, 'Cache-Control': 'no-store' };
+  const origin = res.req?.headers.origin;
+  if (origin && LOCAL_ORIGIN.test(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers.Vary = 'Origin';
+  }
+  res.writeHead(status, headers);
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 
@@ -60,12 +69,56 @@ export function startServer(cfg, { port = cfg.server.port } = {}) {
     baselines: store.paths.baselines,
   };
 
+  // One check at a time, started from the dashboard or the Storybook panel.
+  const run = {
+    state: { running: false, startedAt: null, finishedAt: null, error: null, done: 0, total: 0 },
+    snapshot() {
+      const { state } = run;
+      return { ...state, summary: store.readManifest()?.summary ?? null, buildId: store.readManifest()?.buildId ?? null };
+    },
+    start() {
+      Object.assign(run.state, { running: true, startedAt: new Date().toISOString(), finishedAt: null, error: null, done: 0, total: 0 });
+      runCheck(cfg, { progress: (done, total) => Object.assign(run.state, { done, total }) })
+        .catch((err) => { run.state.error = err.message; })
+        .finally(() => Object.assign(run.state, { running: false, finishedAt: new Date().toISOString() }));
+    },
+  };
+
   const server = http.createServer(async (req, res) => {
+    res.req = req;
     const url = new URL(req.url, 'http://x');
     const pathname = decodeURIComponent(url.pathname);
 
     try {
+      // Preflight for the Storybook "Visual tests" panel (a different local port).
+      if (req.method === 'OPTIONS') {
+        const origin = req.headers.origin;
+        if (!origin || !LOCAL_ORIGIN.test(origin)) return send(res, 403, { error: 'Origin not allowed' });
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'content-type, x-requested-with',
+          'Access-Control-Max-Age': '600',
+          Vary: 'Origin',
+        });
+        return res.end();
+      }
+
+      // Every state-changing call must carry this header. A plain cross-site form or no-cors fetch
+      // cannot set it, and a cross-origin fetch that does is stopped by the preflight above.
+      if (req.method === 'POST' && req.headers['x-requested-with'] !== 'kitsune') {
+        return send(res, 403, { error: 'Missing x-requested-with: kitsune header' });
+      }
+
       if (req.method === 'GET' && pathname === '/api/mode') return send(res, 200, { mode: 'local', ui: cfg.ui });
+
+      if (req.method === 'GET' && pathname === '/api/run') return send(res, 200, run.snapshot());
+
+      if (req.method === 'POST' && pathname === '/api/run') {
+        if (run.state.running) return send(res, 409, { error: 'A check is already running', ...run.snapshot() });
+        run.start();
+        return send(res, 202, run.snapshot());
+      }
 
       if (req.method === 'GET' && pathname === '/api/build') {
         const manifest = store.readManifest();

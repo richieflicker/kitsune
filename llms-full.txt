@@ -154,6 +154,15 @@ manager import automatically (`@storybook/manager-api` on 8, `storybook/manager-
 completely different domain will not keep you signed in inside the tab; open it in its own browser tab instead.
 Not tested: Storybook 7 or earlier, and non-React frameworks.
 
+### "Visual tests" in the testing panel (Storybook 10+)
+
+With the addon installed, Storybook's sidebar testing module gets a **Visual tests (Kitsune)** entry. Expand the module (the chevron beside **Run tests**) to see the result of the last check ("3 to review · 120 ok"), start a new run with **Run visual tests**, and jump to the review tab with **Review changes**.
+
+- It talks to `kitsune serve`, so keep that running (`npm run kitsune:serve`). If it is not reachable the panel says so.
+- Browsers on other origins cannot call it: only `localhost`/`127.0.0.1` pages are allowed, and every POST needs an `x-requested-with: kitsune` header.
+- Pointing the addon at a shared server shows the panel with just the "Open Kitsune" button (no run endpoint there).
+- Storybook 8 and 9 keep the tab only; the testing module API is Storybook 10.
+
 ## GitHub pull request check
 
 `kitsune check --github` posts a **`visual-review`** commit status on the PR, the same kind of check Chromatic adds:
