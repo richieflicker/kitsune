@@ -1,0 +1,58 @@
+# Copy to .github/workflows/visual-review.yml
+#
+# After the first run, make the check required:
+#   Repo Settings -> Branches -> branch protection rule -> "Require status checks to pass"
+#   -> add "visual-review" (it only appears in the list once a run has posted it).
+name: Visual review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  statuses: write # lets `kitsune check --github` post the "visual-review" commit status
+
+jobs:
+  visual-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Install only the browsers listed in `browsers` in kitsune.config.js.
+      - run: npx playwright install --with-deps chromium firefox webkit
+
+      - run: npx storybook build
+
+      - name: Visual check
+        run: npx kitsune check --github --review-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lets reviewers download the new screenshots and diff images for this run.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-review
+          path: .kitsune/current/
+
+# ---------------------------------------------------------------------------
+# Using the shared review server instead (web approvals, per-branch baselines)?
+# Replace the "Visual check" step and the artifact upload with:
+#
+#      - name: Visual check
+#        run: npx kitsune check --remote
+#        env:
+#          KITSUNE_URL: ${{ vars.KITSUNE_URL }}
+#          KITSUNE_UPLOAD_TOKEN: ${{ secrets.KITSUNE_UPLOAD_TOKEN }}
+#
+# The server posts the "visual-review" status itself (it needs KITSUNE_GITHUB_TOKEN),
+# so this job no longer needs `statuses: write` or GITHUB_TOKEN. The job still
+# fails while changes are unreviewed; re-run it after approving, or rely on the
+# status the server updates.

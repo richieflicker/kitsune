@@ -1,0 +1,16 @@
+{
+  "v": 5,
+  "entries": {
+    "button--primary": { "type": "story", "id": "button--primary", "title": "Components/Button", "name": "Primary", "tags": [] },
+    "button--secondary": { "type": "story", "id": "button--secondary", "title": "Components/Button", "name": "Secondary", "tags": [] },
+    "button--disabled": { "type": "story", "id": "button--disabled", "title": "Components/Button", "name": "Disabled", "tags": [] },
+    "card--default": { "type": "story", "id": "card--default", "title": "Components/Card", "name": "Default", "tags": [] },
+    "card--long-title": { "type": "story", "id": "card--long-title", "title": "Components/Card", "name": "Long title", "tags": [] },
+    "badge--list": { "type": "story", "id": "badge--list", "title": "Components/Badge", "name": "List", "tags": [] },
+    "form--error": { "type": "story", "id": "form--error", "title": "Components/Form", "name": "With error", "tags": [] },
+    "navbar--default": { "type": "story", "id": "navbar--default", "title": "Layout/Navbar", "name": "Default", "tags": [] },
+    "loader--pulse": { "type": "story", "id": "loader--pulse", "title": "Components/Loader", "name": "Pulse (animated)", "tags": [] },
+    "button--docs": { "type": "docs", "id": "button--docs", "title": "Components/Button", "name": "Docs", "tags": [] },
+    "internal--scratch": { "type": "story", "id": "internal--scratch", "title": "Internal/Scratch", "name": "Scratch", "tags": ["skip-visual"] }
+  }
+}

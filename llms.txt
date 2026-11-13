@@ -1,0 +1,41 @@
+# Kitsune Review
+
+> Kitsune Review is a self-hosted, Chromatic-style visual regression review tool for Storybook, written in plain JavaScript (Node, Playwright, pixelmatch, React dashboard). It screenshots every story in Chromium, Firefox and WebKit, compares each with an approved baseline, and lets reviewers approve or reject changes in a browser dashboard or a Storybook tab. An optional shared review server (SQLite plus files on disk, no Docker) adds web approvals, per-branch baselines and GitHub commit statuses. Author: Richie Flicker.
+
+Key facts for tools and assistants:
+- CLI: `kitsune init | check | serve | approve | reject | status` and `kitsune server start | create-project | rotate-tokens | inspect | prune`.
+- `kitsune check` needs a built Storybook (`storybook build`) and exits with code 1 when any story is changed, rejected or errored.
+- First capture of a story is approved automatically as its baseline. Each browser keeps its own baselines.
+- Configuration lives in `kitsune.config.js` (per-story `overrides`, masks, thresholds, `ui` defaults); the shared server is configured by `kitsune.server.json`, environment variables and flags (flags beat environment variables beat the file).
+- The shared server needs Node 22.13 or newer. Secrets (upload and review tokens, GitHub token) are never read from config files.
+- Licence: MIT (see LICENSE), copyright (c) 2026 Richie Flicker. The package is not published on npm and is marked private.
+
+## Docs
+
+- [README](./README.md): overview, quick start, how a run decides, cross-browser testing, Storybook tab, GitHub check, shared review server
+- [COMMANDS](./COMMANDS.md): every command and option, the full config reference, server settings file, environment variables, troubleshooting
+- [llms-full.txt](./llms-full.txt): README and COMMANDS combined in one file
+
+## Source map
+
+- [bin/kitsune.js](./bin/kitsune.js): CLI entry point
+- [src/cli.js](./src/cli.js): all commands and options
+- [src/config.js](./src/config.js): defaults and validation of kitsune.config.js
+- [src/rules.js](./src/rules.js): per-story overrides and the rule for what counts as changed
+- [src/capture.js](./src/capture.js): Playwright capture (masks, hiding, waiting, environment)
+- [src/compare.js](./src/compare.js): pixelmatch comparison
+- [src/check.js](./src/check.js): a local run, approve and reject
+- [src/remote.js](./src/remote.js): upload to the shared review server
+- [src/server/app.js](./src/server/app.js): shared server HTTP API
+- [src/server/service.js](./src/server/service.js): builds, snapshots, approvals, GitHub status
+- [src/server/db.js](./src/server/db.js): the only file that contains SQL
+- [src/server/storage.js](./src/server/storage.js): image and diff folders, archive
+- [src/server/prune.js](./src/server/prune.js): retiring files of old builds
+- [src/server/settings.js](./src/server/settings.js): kitsune.server.json
+- [dashboard/src](./dashboard/src): React review UI (side by side, slider, diff, themes)
+- [addon](./addon): Storybook 8, 9 and 10 manager tab
+
+## Optional
+
+- [examples/kitsune.config.js](./examples/kitsune.config.js): config for the bundled mock Storybook
+- [examples/visual-review.yml](./examples/visual-review.yml): GitHub Actions workflow
