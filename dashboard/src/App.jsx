@@ -175,7 +175,7 @@ export default function App({ source, headerExtra = null, onChanged }) {
           )}
         </main>
       </div>
-      <footer className="footer">🦊 Kitsune Review · © 2026 Richie Flicker · MIT</footer>
+      <footer className="footer">🦊 Kitsune Review · MIT</footer>
     </div>
   );
 }
