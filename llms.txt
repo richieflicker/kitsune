@@ -3,7 +3,7 @@
 > Kitsune Review is a self-hosted, Chromatic-style visual regression review tool for Storybook, written in plain JavaScript (Node, Playwright, pixelmatch, React dashboard). It screenshots every story in Chromium, Firefox and WebKit, compares each with an approved baseline, and lets reviewers approve or reject changes in a browser dashboard, a Storybook tab, or the "Visual tests (Kitsune)" entry in Storybook 9.1+/10's sidebar testing panel (run checks, see how many need review). An optional shared review server (SQLite plus files on disk, no Docker) adds web approvals, per-branch baselines and GitHub commit statuses. Author: Richie Flicker.
 
 Key facts for tools and assistants:
-- CLI: `kitsune init | check | serve | approve | reject | status` and `kitsune server start | create-project | rotate-tokens | inspect | prune`.
+- CLI: `kitsune init (also adds kitsune:* scripts to package.json) | browsers | check | serve | approve | reject | status` and `kitsune server start | create-project | rotate-tokens | inspect | prune`.
 - `kitsune check` needs a built Storybook (`storybook build`) and exits with code 1 when any story is changed, rejected or errored.
 - Shared server sign-in: personal review tokens per person (`kitsune user add "Name" | user list | user revoke "Name"`, long forms `kitsune server add-reviewer | list-reviewers | revoke-reviewer | disable-shared-token`), stored hashed in the SQLite database with sessions; optional read-only public viewing with `--public-project`.
 - The Storybook panel has a checkbox per browser and runs only the ticked ones (`POST /api/run` with `{"browsers": [...]}`); on a shared-server address it shows a sign-in prompt instead.

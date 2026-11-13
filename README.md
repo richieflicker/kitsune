@@ -30,7 +30,7 @@ npm run example:check                  # green again
 ## Use it on a real project
 
 1. `npx storybook build` (produces `storybook-static/`).
-2. `npx kitsune init`, then edit `kitsune.config.js` (set `storybook.dir`, viewports).
+2. `npx kitsune init`: creates `kitsune.config.js` (set `storybook.dir`, viewports) and adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to your `package.json`. It never overwrites a script you already have; use `--no-scripts` to leave `package.json` alone.
 3. `npx kitsune check` → `npx kitsune serve`.
 4. Commit `.kitsune/baselines/` and `.kitsune/approved.json`. Ignore `.kitsune/current/`.
 
@@ -102,7 +102,7 @@ export default {
 ```
 
 ```bash
-npx playwright install chromium firefox webkit   # once per machine / CI image
+npx kitsune browsers                           # installs firefox + webkit (chromium: `npx kitsune browsers chromium`)
 ```
 
 - Snapshots are keyed `story__viewport__browser`, so every browser has its own baselines and approvals.

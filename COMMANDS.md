@@ -21,7 +21,8 @@ build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  
 
 | Command | What it does |
 |---|---|
-| `kitsune init` | Creates a starter `kitsune.config.js` in the current folder. Run once per project. |
+| `kitsune init [--no-scripts]` | Creates a starter `kitsune.config.js` and adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to `package.json` (existing scripts are never overwritten). Safe to run again. |
+| `kitsune browsers [names...]` | Installs Playwright browsers using the Playwright that Kitsune itself uses. Default: `firefox webkit`. |
 | `kitsune check` | Captures every story, compares with baselines, prints a summary. **Exits with code 1 if anything needs review**, which is what makes CI fail. |
 | `kitsune serve` | Opens the review dashboard (default http://127.0.0.1:4455): before/after, slider, diff, approve/reject. |
 | `kitsune approve [keys…]` | Approves changed stories; the new screenshot becomes the baseline. |
@@ -163,7 +164,7 @@ above 1, or a misspelled option inside `overrides`).
 |---|---|
 | `storybook.dir` / `storybook.url` | The built Storybook folder (e.g. `./storybook-static`) or a running Storybook URL. Use one. |
 | `viewports` | Sizes to capture: `[{ name: 'desktop', width: 1280, height: 720 }, …]`. Names must be unique. |
-| `browsers` | `chromium`, `firefox`, `webkit` (install with `npx playwright install firefox webkit`). |
+| `browsers` | `chromium`, `firefox`, `webkit` (install with `npx kitsune browsers`). |
 | `include` / `exclude` / `excludeTags` | Which stories to capture (id fragments). Stories tagged `skip-visual` are skipped. |
 | `concurrency` | Stories captured at once (default 4). |
 | `dataDir` | Local results (default `.kitsune`): `baselines/` (commit this to git), `approved.json`, `current/`. |

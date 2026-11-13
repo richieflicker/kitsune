@@ -11,6 +11,9 @@ import { describeManifest, githubContext, postStatusSafely } from './github.js';
 import { runRemoteCheck } from './remote.js';
 import { startServer } from './server.js';
 import { createStore } from './store.js';
+import { addProjectScripts } from './init.js';
+import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 
 const COLORS = { new: '\x1b[36m', unchanged: '\x1b[32m', changed: '\x1b[33m', accepted: '\x1b[32m', rejected: '\x1b[31m', error: '\x1b[31m' };
 const paint = (status, text) => (process.stdout.isTTY ? `${COLORS[status] ?? ''}${text}\x1b[0m` : text);
@@ -50,10 +53,13 @@ export async function main(argv) {
 
   program
     .command('init')
-    .description('Create a starter kitsune.config.js')
-    .action(() => {
+    .description('Create a starter kitsune.config.js and add kitsune:* scripts to package.json')
+    .option('--no-scripts', 'do not touch package.json')
+    .action((opts) => {
       const file = path.resolve('kitsune.config.js');
-      if (fs.existsSync(file)) throw new Error('kitsune.config.js already exists');
+      if (fs.existsSync(file)) {
+        console.log('kitsune.config.js already exists, left as it is');
+      } else {
       fs.writeFileSync(
         file,
         `export default {
@@ -74,6 +80,28 @@ export async function main(argv) {
 `,
       );
       console.log('Created kitsune.config.js');
+      }
+      if (!opts.scripts) return;
+      const r = addProjectScripts(path.resolve('package.json'));
+      if (r.status === 'no-package-json') console.log('No package.json here, so no scripts were added.');
+      else if (r.status === 'unreadable') console.log('package.json could not be read as JSON, so no scripts were added.');
+      else {
+        if (r.added.length) console.log(`Added to package.json: ${r.added.map((s) => `npm run ${s}`).join(', ')}`);
+        if (r.kept.length) console.log(`Kept your own versions of: ${r.kept.join(', ')}`);
+      }
+      console.log('\nNext: npm run kitsune:browsers (only for Firefox/WebKit), build Storybook, then npm run kitsune:check.');
+      console.log('Storybook tab and testing panel: add { name: \'kitsune-review\', options: { url: \'http://127.0.0.1:4455\' } } to addons in .storybook/main.js and run `npm run kitsune:serve`.');
+    });
+
+  program
+    .command('browsers [names...]')
+    .description('Install the Playwright browsers Kitsune uses (default: firefox webkit; chromium is installed by Playwright on first run)')
+    .action((names) => {
+      const require = createRequire(import.meta.url);
+      const cli = path.join(path.dirname(require.resolve('playwright/package.json')), 'cli.js');
+      const list = names.length ? names : ['firefox', 'webkit'];
+      const r = spawnSync(process.execPath, [cli, 'install', ...list], { stdio: 'inherit' });
+      if (r.status !== 0) process.exitCode = r.status ?? 1;
     });
 
   program
