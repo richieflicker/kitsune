@@ -71,6 +71,17 @@ CREATE TABLE IF NOT EXISTS approvals (
 );
 CREATE INDEX IF NOT EXISTS approvals_lookup ON approvals(project_id, key, branch, id DESC);
 
+-- One row per person: a named token that can sign in and approve, and be revoked on its own.
+CREATE TABLE IF NOT EXISTS reviewers (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS reviewers_name ON reviewers(project_id, name) WHERE revoked_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS sessions (
   id_hash TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -106,6 +117,7 @@ export async function openDb(dataDir) {
   // Small forward-only migrations for databases created by an older version.
   const columns = db.prepare(`PRAGMA table_info(snapshots)`).all().map((c) => c.name);
   if (!columns.includes('rules')) db.exec(`ALTER TABLE snapshots ADD COLUMN rules TEXT`);
+  if (!db.prepare(`PRAGMA table_info(sessions)`).all().some((c) => c.name === 'reviewer_id')) db.exec(`ALTER TABLE sessions ADD COLUMN reviewer_id TEXT`);
 
   const p = (sql) => db.prepare(sql);
   const q = {
@@ -114,6 +126,7 @@ export async function openDb(dataDir) {
     projectByName: p(`SELECT * FROM projects WHERE name = ?`),
     projectByUploadHash: p(`SELECT * FROM projects WHERE upload_token_hash = ?`),
     projectByReviewHash: p(`SELECT * FROM projects WHERE review_token_hash = ?`),
+    setReviewHash: p(`UPDATE projects SET review_token_hash = ? WHERE id = ?`),
     setTokens: p(`UPDATE projects SET upload_token_hash = ?, review_token_hash = ? WHERE id = ?`),
     deleteProjectSessions: p(`DELETE FROM sessions WHERE project_id = ?`),
 
@@ -153,7 +166,15 @@ export async function openDb(dataDir) {
       UNION SELECT image_hash FROM approvals a WHERE id = (
         SELECT MAX(id) FROM approvals WHERE project_id = a.project_id AND key = a.key AND branch = a.branch)`),
 
-    insertSession: p(`INSERT INTO sessions (id_hash,project_id,name,created_at,expires_at) VALUES (?,?,?,?,?)`),
+    insertSession: p(`INSERT INTO sessions (id_hash,project_id,name,created_at,expires_at,reviewer_id) VALUES (?,?,?,?,?,?)`),
+    insertReviewer: p(`INSERT INTO reviewers (id,project_id,name,token_hash,created_at) VALUES (?,?,?,?,?)`),
+    reviewerByHash: p(`SELECT * FROM reviewers WHERE token_hash = ? AND revoked_at IS NULL`),
+    reviewerById: p(`SELECT * FROM reviewers WHERE id = ?`),
+    reviewerByName: p(`SELECT * FROM reviewers WHERE project_id = ? AND name = ? AND revoked_at IS NULL`),
+    listReviewers: p(`SELECT * FROM reviewers WHERE project_id = ? ORDER BY created_at`),
+    revokeReviewer: p(`UPDATE reviewers SET revoked_at = ? WHERE id = ?`),
+    deleteSharedSessions: p(`DELETE FROM sessions WHERE project_id = ? AND reviewer_id IS NULL`),
+    deleteReviewerSessions: p(`DELETE FROM sessions WHERE reviewer_id = ?`),
     session: p(`SELECT * FROM sessions WHERE id_hash = ?`),
     deleteSession: p(`DELETE FROM sessions WHERE id_hash = ?`),
     purgeSessions: p(`DELETE FROM sessions WHERE expires_at < ?`),
@@ -210,7 +231,20 @@ export async function openDb(dataDir) {
     hashesOfBuild: (buildId) => q.hashesOfBuild.all(buildId, buildId).map((r) => r.h),
     hashesInUse: (cutoffIso) => new Set(q.hashesInUse.all(cutoffIso, cutoffIso).map((r) => r.h)),
 
-    insertSession: (s) => q.insertSession.run(s.idHash, s.projectId, s.name, s.createdAt, s.expiresAt),
+    insertSession: (s) => q.insertSession.run(s.idHash, s.projectId, s.name, s.createdAt, s.expiresAt, s.reviewerId ?? null),
+    insertReviewer: (r) => q.insertReviewer.run(r.id, r.projectId, r.name, r.tokenHash, r.createdAt),
+    reviewerByHash: (h) => q.reviewerByHash.get(h),
+    reviewerById: (id) => q.reviewerById.get(id),
+    reviewerByName: (projectId, name) => q.reviewerByName.get(projectId, name),
+    listReviewers: (projectId) => q.listReviewers.all(projectId),
+    revokeReviewer: (id, at) => {
+      q.revokeReviewer.run(at, id);
+      q.deleteReviewerSessions.run(id);
+    },
+    disableSharedReview: (projectId, hash) => {
+      q.setReviewHash.run(hash, projectId);
+      q.deleteSharedSessions.run(projectId); // personal-token sessions stay signed in
+    },
     session: (idHash) => q.session.get(idHash),
     deleteSession: (idHash) => q.deleteSession.run(idHash),
     purgeSessions: (nowIso) => q.purgeSessions.run(nowIso),

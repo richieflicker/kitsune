@@ -26,6 +26,7 @@ export default function App({ source, headerExtra = null, onChanged }) {
   const [selectedKey, setSelectedKey] = useState(null);
   const [busy, setBusy] = useState(false);
   const [browser, setBrowser] = useState('all');
+  const readOnly = Boolean(source.readOnly);
 
   useEffect(() => {
     source.loadBuild().then(setBuild).catch((e) => setError(e.message));
@@ -77,8 +78,8 @@ export default function App({ source, headerExtra = null, onChanged }) {
       const i = stories.findIndex((s) => s.key === selected?.key);
       if (e.key === 'j' && stories[i + 1]) setSelectedKey(stories[i + 1].key);
       if (e.key === 'k' && stories[i - 1]) setSelectedKey(stories[i - 1].key);
-      if (e.key === 'a' && selected && !busy) run('approve', { key: selected.key });
-      if (e.key === 'r' && selected && !busy) run('reject', { key: selected.key });
+      if (!readOnly && e.key === 'a' && selected && !busy) run('approve', { key: selected.key });
+      if (!readOnly && e.key === 'r' && selected && !busy) run('reject', { key: selected.key });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -112,9 +113,11 @@ export default function App({ source, headerExtra = null, onChanged }) {
           <span className={`badge ${summary.pending ? 'badge-warn' : 'badge-ok'}`}>
             {summary.pending ? `${summary.pending} to review` : 'All approved'}
           </span>
-          <button className="btn btn-primary" disabled={busy || !summary.changed} onClick={() => run('approve', { all: true })}>
-            Approve all changes ({summary.changed})
-          </button>
+          {!readOnly && (
+            <button className="btn btn-primary" disabled={busy || !summary.changed} onClick={() => run('approve', { all: true })}>
+              Approve all changes ({summary.changed})
+            </button>
+          )}
         </div>
       </header>
 
@@ -161,12 +164,12 @@ export default function App({ source, headerExtra = null, onChanged }) {
               </li>
             ))}
           </ul>
-          <p className="hint muted pad">j/k move · a approve · r reject</p>
+          <p className="hint muted pad">{readOnly ? "j/k move · view only" : "j/k move · a approve · r reject"}</p>
         </aside>
 
         <main className="main">
           {selected ? (
-            <Viewer key={selected.key} story={selected} buildId={build.buildId} busy={busy} onApprove={() => run('approve', { key: selected.key })} onReject={() => run('reject', { key: selected.key })} />
+            <Viewer key={selected.key} story={selected} buildId={build.buildId} busy={busy} readOnly={readOnly} onApprove={() => run('approve', { key: selected.key })} onReject={() => run('reject', { key: selected.key })} />
           ) : (
             <Empty title="Select a story" />
           )}

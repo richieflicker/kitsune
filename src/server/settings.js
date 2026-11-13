@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { defaults, merge, validateUi } from '../config.js';
 
 const FILE_NAMES = ['kitsune.server.json', 'kitsune.server.js', 'kitsune.server.mjs'];
-const KNOWN = ['port', 'host', 'dataDir', 'imagesDir', 'diffsDir', 'archiveDir', 'publicUrl', 'trustProxy', 'sessionDays', 'github', 'retention', 'ui'];
+const KNOWN = ['port', 'host', 'dataDir', 'imagesDir', 'diffsDir', 'archiveDir', 'publicUrl', 'trustProxy', 'sessionDays', 'publicProject', 'github', 'retention', 'ui'];
 
 /**
  * Settings of the shared review server, from a file (kitsune.server.json / .js in the working folder, or
@@ -72,6 +72,7 @@ export async function loadServerSettings({ file, cwd = process.cwd() } = {}) {
     diffsDir: dir(raw.diffsDir),
     archiveDir: dir(raw.archiveDir),
     publicUrl: raw.publicUrl,
+    publicProject: raw.publicProject,
     trustProxy: raw.trustProxy === true,
     sessionDays: int('sessionDays', raw.sessionDays, { min: 1, max: 90 }),
     githubApiUrl: github.apiUrl,
@@ -84,6 +85,7 @@ export async function loadServerSettings({ file, cwd = process.cwd() } = {}) {
 export function effectiveEnv(settings, env = process.env) {
   const fromFile = {
     KITSUNE_PUBLIC_URL: settings.publicUrl,
+    KITSUNE_PUBLIC_PROJECT: settings.publicProject,
     KITSUNE_TRUST_PROXY: settings.trustProxy ? '1' : undefined,
     KITSUNE_GITHUB_API_URL: settings.githubApiUrl,
   };

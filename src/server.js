@@ -71,14 +71,33 @@ export function startServer(cfg, { port = cfg.server.port } = {}) {
 
   // One check at a time, started from the dashboard or the Storybook panel.
   const run = {
-    state: { running: false, startedAt: null, finishedAt: null, error: null, done: 0, total: 0 },
+    state: { running: false, startedAt: null, finishedAt: null, error: null, done: 0, total: 0, ran: [] },
     snapshot() {
       const { state } = run;
-      return { ...state, summary: store.readManifest()?.summary ?? null, buildId: store.readManifest()?.buildId ?? null };
+      const manifest = store.readManifest();
+      // Per-browser result of the last run, so the panel can show a status dot for each browser.
+      const byBrowser = {};
+      for (const s of manifest?.stories ?? []) {
+        const b = (byBrowser[s.browser] ??= { total: 0, pending: 0 });
+        b.total += 1;
+        if (s.status === 'changed' || s.status === 'rejected' || s.status === 'error') b.pending += 1;
+      }
+      return {
+        ...state,
+        browsers: cfg.browsers.map((b) => b.name),
+        byBrowser,
+        summary: manifest?.summary ?? null,
+        buildId: manifest?.buildId ?? null,
+      };
     },
-    start() {
-      Object.assign(run.state, { running: true, startedAt: new Date().toISOString(), finishedAt: null, error: null, done: 0, total: 0 });
-      runCheck(cfg, { progress: (done, total) => Object.assign(run.state, { done, total }) })
+    start(only) {
+      const names = cfg.browsers.map((b) => b.name);
+      const chosen = Array.isArray(only) && only.length ? only : names;
+      const unknown = chosen.filter((n) => !names.includes(n));
+      if (unknown.length) throw Object.assign(new Error(`Unknown browser: ${unknown.join(', ')}. Configured: ${names.join(', ')}`), { status: 400 });
+      const runCfg = { ...cfg, browsers: cfg.browsers.filter((b) => chosen.includes(b.name)) };
+      Object.assign(run.state, { running: true, startedAt: new Date().toISOString(), finishedAt: null, error: null, done: 0, total: 0, ran: chosen });
+      runCheck(runCfg, { progress: (done, total) => Object.assign(run.state, { done, total }) })
         .catch((err) => { run.state.error = err.message; })
         .finally(() => Object.assign(run.state, { running: false, finishedAt: new Date().toISOString() }));
     },
@@ -116,7 +135,12 @@ export function startServer(cfg, { port = cfg.server.port } = {}) {
 
       if (req.method === 'POST' && pathname === '/api/run') {
         if (run.state.running) return send(res, 409, { error: 'A check is already running', ...run.snapshot() });
-        run.start();
+        const body = await readBody(req);
+        try {
+          run.start(body.browsers);
+        } catch (err) {
+          return send(res, err.status ?? 500, { error: err.message });
+        }
         return send(res, 202, run.snapshot());
       }
 

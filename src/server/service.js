@@ -156,10 +156,48 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       return token ? db.projectByUploadHash(sha256(token)) ?? null : null;
     },
 
+    // ---------- per-person review tokens ----------
+    addReviewer(projectName, personName) {
+      const project = db.projectByName(projectName);
+      if (!project) throw new HttpError(404, `No project named "${projectName}"`);
+      const name = cleanText(personName, 60, 'Name');
+      if (db.reviewerByName(project.id, name)) throw new HttpError(409, `"${name}" already has an active token. Revoke it first to issue a new one.`);
+      const token = newToken('kitsune_rv');
+      db.insertReviewer({ id: `r_${crypto.randomBytes(6).toString('hex')}`, projectId: project.id, name, tokenHash: sha256(token), createdAt: new Date().toISOString() });
+      return { project, name, token };
+    },
+
+    listReviewers(projectName) {
+      const project = db.projectByName(projectName);
+      if (!project) throw new HttpError(404, `No project named "${projectName}"`);
+      return db.listReviewers(project.id);
+    },
+
+    revokeReviewer(projectName, personName) {
+      const project = db.projectByName(projectName);
+      if (!project) throw new HttpError(404, `No project named "${projectName}"`);
+      const row = db.reviewerByName(project.id, personName);
+      if (!row) throw new HttpError(404, `No active token for "${personName}"`);
+      db.revokeReviewer(row.id, new Date().toISOString());
+      return { project, name: row.name };
+    },
+
+    /** Turn the shared review token off so only personal tokens can sign in. */
+    disableSharedReview(projectName) {
+      const project = db.projectByName(projectName);
+      if (!project) throw new HttpError(404, `No project named "${projectName}"`);
+      db.disableSharedReview(project.id, sha256(newToken('kitsune_off')));
+      return { project };
+    },
+
     login(token, name) {
-      const project = token ? db.projectByReviewHash(sha256(String(token))) : null;
-      if (!project) throw new HttpError(401, 'Invalid review token');
-      name = cleanText(name, 60, 'Name');
+      const hash = token ? sha256(String(token)) : null;
+      const person = hash ? db.reviewerByHash(hash) : null;
+      const project = person ? db.projectById(person.project_id) : hash ? db.projectByReviewHash(hash) : null;
+      if (!project) throw new HttpError(401, 'Invalid token');
+      // A personal token carries its own name, so nobody can approve under someone else's. The shared token
+      // still asks for a name, because it cannot tell its holders apart.
+      name = person ? person.name : cleanText(name, 60, 'Name');
       db.purgeSessions(new Date().toISOString());
       const sessionId = crypto.randomBytes(32).toString('base64url');
       const now = Date.now();
@@ -169,6 +207,7 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
         name,
         createdAt: new Date(now).toISOString(),
         expiresAt: new Date(now + sessionDays * 864e5).toISOString(),
+        reviewerId: person?.id ?? null,
       });
       return { sessionId, maxAgeSeconds: sessionDays * 86400, project, name };
     },
@@ -177,6 +216,7 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       if (!sessionId) return null;
       const row = db.session(sha256(sessionId));
       if (!row || row.expires_at < new Date().toISOString()) return null;
+      if (row.reviewer_id && db.reviewerById(row.reviewer_id)?.revoked_at) return null;
       const project = db.projectById(row.project_id);
       return project ? { project, name: row.name } : null;
     },

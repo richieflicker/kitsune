@@ -195,6 +195,18 @@ export async function main(argv) {
     };
   }
 
+  async function withService(opts, fn) {
+    const { openDb } = await import('./server/db.js');
+    const { createService } = await import('./server/service.js');
+    const r = await resolveServer(opts);
+    const db = await openDb(r.dataDir);
+    try {
+      return await fn(createService({ db, dataDir: r.dataDir, env: r.env }));
+    } finally {
+      db.close();
+    }
+  }
+
   const withFolders = (cmd) => cmd.option(...dataOption).option(...imagesOption).option(...diffsOption).option(...archiveOption).option(...settingsOption);
 
   withFolders(
@@ -202,7 +214,8 @@ export async function main(argv) {
       .command('start')
       .description('Start the shared review server (dashboard + API)')
       .option('-p, --port <port>', 'port (default 4456)')
-      .option('--host <host>', 'interface to listen on (default 127.0.0.1; keep it behind a reverse proxy)'),
+      .option('--host <host>', 'interface to listen on (default 127.0.0.1; keep it behind a reverse proxy)')
+      .option('--public-project <name>', 'let anyone view this project read-only without signing in (approving and uploading still need tokens)'),
   ).action(async (opts) => {
     const { startRemoteServer } = await import('./server/app.js');
     const r = await resolveServer(opts);
@@ -219,11 +232,14 @@ export async function main(argv) {
       env: r.env,
       ui: file.ui,
       sessionDays: file.sessionDays,
+      publicProject: opts.publicProject ?? r.env.KITSUNE_PUBLIC_PROJECT,
       retention: file.retention,
     });
     console.log(`Review server listening on ${srv.url}`);
     if (file.file) console.log(`  settings    : ${file.file}`);
     console.log(`  data folder : ${r.dataDir}`);
+    const pub = opts.publicProject ?? r.env.KITSUNE_PUBLIC_PROJECT;
+    console.log(`  viewing     : ${pub ? `anyone can view "${pub}" read-only; sign-in needed to approve` : 'sign-in required'}`);
     console.log(`  images      : ${r.imagesDir ?? 'inside the data folder'}`);
     console.log(`  diffs       : ${r.diffsDir ?? 'inside the data folder'}`);
     if (r.archiveDir) console.log(`  archive     : ${r.archiveDir}`);
@@ -256,6 +272,36 @@ export async function main(argv) {
     } finally {
       db.close();
     }
+  });
+
+  withFolders(server.command('add-reviewer <project> <name>').description('Issue a personal review token (shown once). Approvals are recorded under that name.')).action(async (project, name, opts) => {
+    await withService(opts, (svc) => {
+      const r = svc.addReviewer(project, name);
+      console.log(`Reviewer "${r.name}" on project "${r.project.name}"\n\nSave this now. It is stored hashed and cannot be shown again.\n`);
+      console.log(`  Personal review token : ${r.token}`);
+    });
+  });
+
+  withFolders(server.command('list-reviewers <project>').description('Show who has a personal review token')).action(async (project, opts) => {
+    await withService(opts, (svc) => {
+      const rows = svc.listReviewers(project);
+      if (!rows.length) return console.log('No personal tokens yet. Add one with: kitsune server add-reviewer <project> <name>');
+      for (const r of rows) console.log(`${r.revoked_at ? 'revoked' : 'active '}  ${r.name}  (added ${r.created_at.slice(0, 10)}${r.revoked_at ? `, revoked ${r.revoked_at.slice(0, 10)}` : ''})`);
+    });
+  });
+
+  withFolders(server.command('revoke-reviewer <project> <name>').description("Revoke one person's token and sign them out; nobody else is affected")).action(async (project, name, opts) => {
+    await withService(opts, (svc) => {
+      const r = svc.revokeReviewer(project, name);
+      console.log(`Revoked "${r.name}" on "${r.project.name}". Their sessions are signed out.`);
+    });
+  });
+
+  withFolders(server.command('disable-shared-token <project>').description('Turn off the shared review token so only personal tokens can sign in')).action(async (project, opts) => {
+    await withService(opts, (svc) => {
+      svc.disableSharedReview(project);
+      console.log(`The shared review token for "${project}" no longer works. Only personal tokens can sign in.`);
+    });
   });
 
   withFolders(

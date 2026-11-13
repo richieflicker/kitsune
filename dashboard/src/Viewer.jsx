@@ -13,7 +13,7 @@ const MODES = [
   { id: 'baseline', label: 'Baseline' },
 ];
 
-export default function Viewer({ story, buildId, busy, onApprove, onReject }) {
+export default function Viewer({ story, buildId, busy, readOnly = false, onApprove, onReject }) {
   const canDiff = Boolean(story.diffImage);
   const canCompare = Boolean(story.baselineImage && story.newImage && story.status !== 'new');
   const ui = useUi();
@@ -39,10 +39,10 @@ export default function Viewer({ story, buildId, busy, onApprove, onReject }) {
             {story.sizeChanged && ' · page size changed'}
           </p>
         </div>
-        <div className="viewer-actions">
+        {!readOnly && <div className="viewer-actions">
           <button className="btn btn-reject" disabled={busy || story.status !== 'changed'} onClick={onReject}>Reject</button>
           <button className="btn btn-primary" disabled={busy || !actionable} onClick={onApprove}>Approve</button>
-        </div>
+        </div>}
       </div>
 
       {story.status === 'error' && <div className="banner">Could not render this story: {story.error}</div>}

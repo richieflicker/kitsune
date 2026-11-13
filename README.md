@@ -149,12 +149,17 @@ Not tested: Storybook 7 or earlier, and non-React frameworks.
 
 ### "Visual tests" in the testing panel (Storybook 10+)
 
-With the addon installed, Storybook's sidebar testing module gets a **Visual tests (Kitsune)** entry. Expand the module (the chevron beside **Run tests**) to see the result of the last check ("3 to review · 120 ok"), start a new run with **Run visual tests**, and jump to the review tab with **Review changes**.
+With the addon installed, Storybook's sidebar testing module gets a **Run visual tests** block. Expand the module (the chevron beside **Run tests**) and you get:
+
+- one checkbox per configured browser (Chromium, Firefox, WebKit) with a status dot and "N to review" next to it; your choice is remembered in the browser,
+- a play button that runs the check on the ticked browsers only (a progress bar shows `done/total`),
+- **Review changes** / **Open Kitsune** to jump to the review tab.
+
+If the address is a shared review server, the block shows a locked state with a **Sign in** button (it opens the Kitsune tab, where the sign-in screen is) instead of the run button.
 
 - It talks to `kitsune serve`, so keep that running (`npm run kitsune:serve`). If it is not reachable the panel says so.
 - Browsers on other origins cannot call it: only `localhost`/`127.0.0.1` pages are allowed, and every POST needs an `x-requested-with: kitsune` header.
-- Pointing the addon at a shared server shows the panel with just the "Open Kitsune" button (no run endpoint there).
-- Storybook 8 and 9 keep the tab only; the testing module API is Storybook 10.
+- Storybook 8 keeps the tab only. Storybook 9.1+ and 10 get the testing-panel block.
 
 ## GitHub pull request check
 
@@ -207,8 +212,20 @@ In CI, upload instead of comparing locally (the server posts the `visual-review`
 KITSUNE_URL=https://kitsune.example.com KITSUNE_UPLOAD_TOKEN=... npx kitsune check --remote
 ```
 
-Reviewers open the server URL, sign in with the review token and their name, pick a build, and approve or reject.
-`npx kitsune server rotate-tokens web` issues new tokens.
+Reviewers open the server URL, sign in, pick a build, and approve or reject. Give each person their own token so
+approvals carry a verified name and one person can be removed without touching the others:
+
+```bash
+npx kitsune server add-reviewer web "Asha" --data ./kitsune-data     # prints Asha's token once
+npx kitsune server list-reviewers web --data ./kitsune-data
+npx kitsune server revoke-reviewer web "Asha" --data ./kitsune-data  # signs only Asha out
+npx kitsune server disable-shared-token web --data ./kitsune-data    # optional: personal tokens only
+```
+
+A personal token already carries the name, so the sign-in screen only asks for a name when the shared review token is
+used. Add `--public-project web` to `server start` if anyone should be able to look at the builds read-only without
+signing in (they see "view only" and a **Sign in to review** button; approving and uploading still need a token).
+`npx kitsune server rotate-tokens web` issues new shared tokens and signs everyone out.
 
 **Looking inside the database.** Everything is in one SQLite file, `kitsune-data/kitsune.db` (screenshots are
 separate files in `images/` and `diffs/`). `kitsune server inspect` reads it safely while the server runs:
@@ -221,7 +238,7 @@ npx kitsune server inspect --sql "SELECT key, status, diff_pixels FROM snapshots
 ```
 
 It opens the file read-only, accepts SELECT queries only, and never shows token or session data. Tables:
-`projects`, `builds`, `snapshots`, `approvals` (append-only history that decides each branch's baseline), `sessions`.
+`projects`, `reviewers` (one hashed token per person), `builds`, `snapshots`, `approvals` (append-only history that decides each branch's baseline), `sessions`.
 You can also open `kitsune.db` in any SQLite tool such as DB Browser for SQLite.
 
 **Settings file.** Instead of long flag lists, put the server's settings in `kitsune.server.json` (port, folders, public

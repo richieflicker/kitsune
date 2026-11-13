@@ -76,8 +76,8 @@ Prints the build and the summary counts from the last `check`.
 | Call | What it does |
 | --- | --- |
 | `GET /api/build` | Result of the last check. |
-| `POST /api/run` | Start a check in the background (409 if one is already running). |
-| `GET /api/run` | Progress (`running`, `done`, `total`, `error`) plus the last summary. |
+| `POST /api/run` | Start a check in the background (409 if one is already running). Optional body `{"browsers": ["chromium"]}` limits it to those configured browsers (400 for an unknown name). |
+| `GET /api/run` | Progress (`running`, `done`, `total`, `error`), the configured `browsers`, the last summary and `byBrowser` (`total` and `pending` per browser). |
 | `POST /api/approve`, `POST /api/reject` | Review changed stories (`key`, `keys` or `all`). |
 
 Every `POST` must send `x-requested-with: kitsune`. Cross-origin calls are only accepted from `localhost` / `127.0.0.1` pages, such as Storybook on port 6006.
@@ -85,13 +85,18 @@ Every `POST` must send `x-requested-with: kitsune`. Cross-origin calls are only 
 ## Shared server (web approvals for a team / CI)
 
 Use this when CI runs the check and people approve from a browser. It needs Node 22.13 or newer.
-Everything is stored in one folder: a SQLite database plus PNG files.
+Everything is stored in one folder: a SQLite database (projects, reviewers, sessions, builds, approvals) plus PNG files.
 
 | Command | What it does |
 |---|---|
 | `kitsune server create-project <name>` | Creates a project and prints an **upload token** (for CI) and a **review token** (for reviewers). Shown once. |
 | `kitsune server start` | Starts the dashboard + API (default http://127.0.0.1:4456). |
+| `kitsune server add-reviewer <project> <name>` | Issues a **personal review token** (shown once). Approvals are recorded under that name, and typing another name does nothing. |
+| `kitsune server list-reviewers <project>` | Shows who has a personal token (active or revoked). |
+| `kitsune server revoke-reviewer <project> <name>` | Revokes one person's token and signs only them out. |
+| `kitsune server disable-shared-token <project>` | Turns the shared review token off so only personal tokens can sign in. |
 | `kitsune server rotate-tokens <name>` | Issues new tokens. Old ones stop working and review sessions are signed out. |
+| `kitsune server start --public-project <name>` | Lets anyone view that project read-only without signing in (builds, images, diffs). Approving and uploading still need a token. Off by default. Also `publicProject` in the settings file or `KITSUNE_PUBLIC_PROJECT`. |
 | `kitsune server inspect` | Read-only look inside the database. Safe while the server runs. |
 | `kitsune server prune` | Moves or deletes the files of old builds to save disk space. |
 
@@ -261,6 +266,7 @@ the GitHub token stays in `KITSUNE_GITHUB_TOKEN`. For every setting the order is
 |---|---|
 | `port`, `host` | Where the server listens (env `KITSUNE_PORT`, `KITSUNE_HOST`). |
 | `dataDir`, `imagesDir`, `diffsDir`, `archiveDir` | Folders (env `KITSUNE_DATA_DIR`, `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR`). Relative paths are relative to the settings file. |
+| `publicProject` | Name of a project anyone may view read-only without signing in (env `KITSUNE_PUBLIC_PROJECT`, flag `--public-project`). |
 | `publicUrl` | Public address. PR statuses link here and cookies become `Secure` on https (env `KITSUNE_PUBLIC_URL`). |
 | `trustProxy` | `true` when behind your own reverse proxy, so the real client IP is used (env `KITSUNE_TRUST_PROXY=1`). |
 | `sessionDays` | How long a reviewer stays signed in (1 to 90, default 7). |

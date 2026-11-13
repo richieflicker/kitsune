@@ -107,11 +107,16 @@ function createLoginLimiter() {
   };
 }
 
-export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveDir, port = 4456, host = '127.0.0.1', env = process.env, ui, sessionDays, retention, onRetention = (r) => console.log(r) } = {}) {
+export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveDir, port = 4456, host = '127.0.0.1', env = process.env, ui, sessionDays, retention, publicProject, onRetention = (r) => console.log(r) } = {}) {
   const db = await openDb(dataDir);
   const storage = createFsStorage({ dataDir, imagesDir, diffsDir, archiveDir });
   const svc = createService({ db, dataDir, storage, env, sessionDays });
   const limiter = createLoginLimiter();
+
+  // Optional read-only access: anyone may look at one project's builds and images without signing in.
+  // Approving, rejecting and uploading still need a review / upload token.
+  const publicRow = publicProject ? db.projectByName(publicProject) : null;
+  if (publicProject && !publicRow) throw new Error(`publicProject "${publicProject}" does not exist. Create it first with \`kitsune server create-project\`.`);
   const trustProxy = env.KITSUNE_TRUST_PROXY === '1';
   const secureCookie = (env.KITSUNE_PUBLIC_URL || '').startsWith('https://');
 
@@ -128,7 +133,8 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
   const route = (method, pattern, auth, handler) => routes.push({ method, re: new RegExp(`^${pattern}$`), auth, handler });
 
   // ---- public ----
-  route('GET', '/api/mode', 'none', ({ res }) => send(res, 200, { mode: 'remote', ui }));
+  // The mode is not secret, and the Storybook panel (another origin) reads it to know a sign-in is needed.
+  route('GET', '/api/mode', 'none', ({ res }) => send(res, 200, { mode: 'remote', ui }, { 'Access-Control-Allow-Origin': '*' }));
   route('GET', '/healthz', 'none', ({ res }) => send(res, 200, { ok: true }));
 
   route('POST', '/api/v1/login', 'none', async ({ req, res }) => {
@@ -155,7 +161,8 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
     send(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0` });
   });
 
-  route('GET', '/api/v1/session', 'session', ({ res, session }) => send(res, 200, { project: session.project.name, name: session.name }));
+  route('GET', '/api/v1/session', 'view', ({ res, project, session }) =>
+    send(res, 200, { project: project.name, name: session?.name ?? null, readOnly: !session }));
 
   // ---- CI (upload token) ----
   route('POST', '/api/v1/builds', 'upload', async ({ req, res, project }) => {
@@ -190,10 +197,10 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
   });
 
   // ---- shared read (CI or reviewer) ----
-  route('GET', '/api/v1/builds/(?<id>[^/]+)', 'either', ({ res, project, params }) => send(res, 200, svc.getBuild(project, params.id)));
+  route('GET', '/api/v1/builds/(?<id>[^/]+)', 'either-view', ({ res, project, params }) => send(res, 200, svc.getBuild(project, params.id)));
 
   // ---- reviewers (session) ----
-  route('GET', '/api/v1/builds', 'session', ({ res, project, url }) => {
+  route('GET', '/api/v1/builds', 'view', ({ res, project, url }) => {
     send(res, 200, { builds: svc.listBuilds(project, { branch: url.searchParams.get('branch') || undefined, limit: url.searchParams.get('limit') }) });
   });
 
@@ -207,11 +214,11 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
     });
   }
 
-  route('GET', '/api/v1/images/(?<hash>[a-f0-9]{64})\\.png', 'session', ({ res, project, params }) => {
+  route('GET', '/api/v1/images/(?<hash>[a-f0-9]{64})\\.png', 'view', ({ res, project, params }) => {
     sendFile(res, svc.imageForProject(project, params.hash), { 'Cache-Control': 'private, max-age=31536000, immutable' });
   });
 
-  route('GET', '/api/v1/diffs/(?<id>[^/]+)/(?<key>[^/]+)\\.png', 'session', ({ res, project, params }) => {
+  route('GET', '/api/v1/diffs/(?<id>[^/]+)/(?<key>[^/]+)\\.png', 'view', ({ res, project, params }) => {
     sendFile(res, svc.diffForProject(project, params.id, params.key), { 'Cache-Control': 'private, max-age=3600' });
   });
 
@@ -226,17 +233,18 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
         if (!match) continue;
 
         const ctx = { req, res, url, params: match.groups ?? {} };
-        if (r.auth === 'upload' || r.auth === 'either') {
+        if (r.auth === 'upload' || r.auth === 'either' || r.auth === 'either-view') {
           const project = svc.authUpload(bearer(req));
           if (project) ctx.project = project;
         }
-        if (!ctx.project && (r.auth === 'session' || r.auth === 'either')) {
+        if (!ctx.project && ['session', 'either', 'either-view', 'view'].includes(r.auth)) {
           const session = svc.authSession(sessionId(req));
           if (session) {
             ctx.session = session;
             ctx.project = session.project;
           }
         }
+        if (!ctx.project && publicRow && (r.auth === 'view' || r.auth === 'either-view')) ctx.project = publicRow;
         if (r.auth !== 'none' && !ctx.project) throw new HttpError(401, 'Authentication required');
         if (r.auth === 'session' && !ctx.session) throw new HttpError(401, 'Sign in with a review token');
         return await r.handler(ctx);

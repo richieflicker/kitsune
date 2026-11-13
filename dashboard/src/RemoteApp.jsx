@@ -25,6 +25,7 @@ export default function RemoteApp() {
   const [builds, setBuilds] = useState([]);
   const [selectedId, setSelectedId] = useState(buildIdFromHash());
   const [error, setError] = useState(null);
+  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     remote.session().then(setSession).catch(() => setSession(null));
@@ -56,10 +57,11 @@ export default function RemoteApp() {
     setSelectedId(id);
   };
 
-  const source = useMemo(() => (selectedId ? remote.sourceFor(selectedId) : null), [selectedId]);
+  const readOnly = Boolean(session?.readOnly);
+  const source = useMemo(() => (selectedId ? { ...remote.sourceFor(selectedId), readOnly } : null), [selectedId, readOnly]);
 
   if (session === undefined) return <div className="empty"><h2>Loading…</h2></div>;
-  if (!session) return <Login onDone={setSession} />;
+  if (!session || signingIn) return <Login onDone={(s) => { setSigningIn(false); setSession(s); }} onCancel={session ? () => setSigningIn(false) : null} />;
 
   const header = (
     <div className="remote-bar">
@@ -70,16 +72,20 @@ export default function RemoteApp() {
         ))}
       </select>
       <button className="btn" onClick={loadBuilds} title="Refresh the build list">Refresh</button>
-      <span className="muted">{session.project} · {session.name}</span>
-      <button
-        className="btn"
-        onClick={async () => {
-          await remote.logout().catch(() => {});
-          setSession(null);
-        }}
-      >
-        Sign out
-      </button>
+      <span className="muted">{session.project} · {readOnly ? 'view only' : session.name}</span>
+      {readOnly ? (
+        <button className="btn btn-primary" onClick={() => setSigningIn(true)}>Sign in to review</button>
+      ) : (
+        <button
+          className="btn"
+          onClick={async () => {
+            await remote.logout().catch(() => {});
+            remote.session().then(setSession).catch(() => setSession(null));
+          }}
+        >
+          Sign out
+        </button>
+      )}
     </div>
   );
 
@@ -99,7 +105,7 @@ export default function RemoteApp() {
   return <App key={selectedId} source={source} headerExtra={header} onChanged={loadBuilds} />;
 }
 
-function Login({ onDone }) {
+function Login({ onDone, onCancel }) {
   const [token, setToken] = useState('');
   const [name, setName] = useState(() => localStorage.getItem('kitsune-name') ?? '');
   const [error, setError] = useState(null);
@@ -124,17 +130,18 @@ function Login({ onDone }) {
     <div className="empty">
       <form className="login" onSubmit={submit}>
         <h2>🦊 Kitsune Review</h2>
-        <p className="muted">Sign in with your project's review token. Approvals are recorded under your name.</p>
-        <label>
-          Your name
-          <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required maxLength={60} />
-        </label>
+        <p className="muted">Sign in with your review token. Approvals are recorded under your name.</p>
         <label>
           Review token
           <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" required />
         </label>
+        <label>
+          Your name <span className="muted">(only for a shared team token; personal tokens already carry your name)</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={60} />
+        </label>
         {error && <div className="banner">{error}</div>}
-        <button className="btn btn-primary" disabled={busy || !token || !name}>Sign in</button>
+        <button className="btn btn-primary" disabled={busy || !token}>Sign in</button>
+        {onCancel && <button type="button" className="btn" onClick={onCancel}>Keep viewing only</button>}
       </form>
     </div>
   );

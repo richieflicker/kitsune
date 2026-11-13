@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const SECRET_COLUMNS = new Set(['upload_token_hash', 'review_token_hash', 'id_hash']);
+const SECRET_COLUMNS = new Set(['upload_token_hash', 'review_token_hash', 'token_hash', 'id_hash']);
 
 async function openReadOnly(dataDir) {
   const file = path.join(dataDir, 'kitsune.db');

@@ -5,6 +5,8 @@
 Key facts for tools and assistants:
 - CLI: `kitsune init | check | serve | approve | reject | status` and `kitsune server start | create-project | rotate-tokens | inspect | prune`.
 - `kitsune check` needs a built Storybook (`storybook build`) and exits with code 1 when any story is changed, rejected or errored.
+- Shared server sign-in: personal review tokens per person (`kitsune server add-reviewer | list-reviewers | revoke-reviewer | disable-shared-token`), stored hashed in the SQLite database with sessions; optional read-only public viewing with `--public-project`.
+- The Storybook panel has a checkbox per browser and runs only the ticked ones (`POST /api/run` with `{"browsers": [...]}`); on a shared-server address it shows a sign-in prompt instead.
 - The local dashboard server (`kitsune serve`, default http://127.0.0.1:4455) can start a check itself: `POST /api/run`, progress at `GET /api/run`. The Storybook panel uses these.
 - First capture of a story is approved automatically as its baseline. Each browser keeps its own baselines.
 - Configuration lives in `kitsune.config.js` (per-story `overrides`, masks, thresholds, `ui` defaults); the shared server is configured by `kitsune.server.json`, environment variables and flags (flags beat environment variables beat the file).
