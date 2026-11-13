@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Mock Storybook preview</title>
+  </head>
+  <body>
+    <div id="storybook-root"></div>
+    <script type="module">
+      import { css, stories } from './components.js';
+      const id = new URLSearchParams(location.search).get('id');
+      const style = document.createElement('style');
+      style.textContent = css;
+      document.head.append(style);
+      const render = stories[id];
+      if (!render) {
+        document.body.classList.add('sb-show-errordisplay');
+        document.body.insertAdjacentHTML('beforeend', `<pre id="error-message">Story not found: ${id}</pre>`);
+      } else {
+        document.getElementById('storybook-root').innerHTML = render();
+      }
+    </script>
+  </body>
+</html>

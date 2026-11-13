@@ -1,0 +1,589 @@
+# Kitsune Review: full documentation
+
+> Everything an AI assistant needs to install, configure and run Kitsune Review, generated from README.md and COMMANDS.md.
+> Author: Richie Flicker.
+
+---
+
+# 🦊 Kitsune Review
+
+A self-hosted, Chromatic-style visual review tool for Storybook. Plain JavaScript. It works with just files in git,
+or with an optional shared review server (SQLite, no Docker) for web approvals and per-branch baselines.
+
+By **Richie Flicker**. For AI assistants and tools: see [`llms.txt`](./llms.txt) (index) and [`llms-full.txt`](./llms-full.txt) (all docs in one file).
+
+```
+kitsune check   →  screenshots every story (Chromium, Firefox, WebKit), diffs against approved baselines, exit 1 if anything changed
+kitsune serve   →  review dashboard: side-by-side / slider / diff views, approve or reject per story
+```
+
+**Every command and every setting explained: [COMMANDS.md](./COMMANDS.md).**
+
+## Quick start (try it on the bundled mock Storybook)
+
+```bash
+npm install
+npx playwright install chromium        # or set KITSUNE_BROWSER_PATH to an installed Chrome
+npm run build:dashboard
+
+npm run example:check                  # run 1: every story is "new" and auto-approved
+npm run example:check                  # run 2: all unchanged
+# edit a CSS value in examples/mock-storybook/components.js, then:
+npm run example:check                  # changed stories are flagged, exit code 1
+npm run example:serve                  # open http://127.0.0.1:4455 and approve/reject
+npm run example:check                  # green again
+```
+
+## Use it on a real project
+
+1. `npx storybook build` (produces `storybook-static/`).
+2. `npx kitsune init`, then edit `kitsune.config.js` (set `storybook.dir`, viewports).
+3. `npx kitsune check` → `npx kitsune serve`.
+4. Commit `.kitsune/baselines/` and `.kitsune/approved.json`. Ignore `.kitsune/current/`.
+
+## How a run decides
+
+| Situation | Status | Effect on exit code |
+|---|---|---|
+| No approved baseline for this story yet | `new` — saved as the baseline automatically | none |
+| Baseline exists, pixels match | `unchanged` | none |
+| Baseline exists, pixels differ (or page size changed) | `changed` — waits for review | exit 1 |
+| Story failed to render | `error` | exit 1 |
+| You rejected it in the dashboard | `rejected` | exit 1 |
+
+Approving copies the new screenshot over the baseline and records who/when in `approved.json`.
+"Approve all" only approves `changed` stories, never ones you explicitly rejected.
+
+## Commands
+
+`kitsune init` · `kitsune check [--no-fail] [--github] [--remote]` · `kitsune serve [-p port]` · `kitsune approve [keys...|--all]` · `kitsune reject <keys...>` · `kitsune status`
+
+Shared server: `kitsune server start` · `server create-project <name>` · `server rotate-tokens <name>` · `server inspect` · `server prune`
+
+Every option of every command is explained in [COMMANDS.md](./COMMANDS.md).
+
+## Review dashboard
+
+Side by side, **slider**, diff, new-only and baseline-only views, with fit / 100% zoom and a light, dark or auto theme.
+The slider: drag anywhere on the image or use the arrow keys, jump to Baseline / 50-50 / New, **Blink** between the two
+images to spot a 1px shift, and **Highlight changes** to overlay the diff. Shortcuts: `j`/`k` move, `a` approve, `r` reject.
+Defaults (starting view, slider position, blink speed, theme...) are set in the `ui` section of the config, and each
+reviewer's own choices are remembered in their browser.
+
+## Config (`kitsune.config.js`)
+
+The common options are below; the **full reference** (capture environment, masks, per-story `overrides`, comparison
+rules, dashboard defaults) is in [COMMANDS.md](./COMMANDS.md#configuration-reference-kitsuneconfigjs).
+
+| Option | Default | Notes |
+|---|---|---|
+| `storybook.dir` / `storybook.url` | — | Built folder (served for you) or a running Storybook |
+| `viewports` | desktop 1280×720 | Add more, e.g. mobile 390×844 |
+| `browsers` | `['chromium']` | `'chromium'`, `'firefox'`, `'webkit'`, or `{ name, type, executablePath, channel, args }`. Each keeps its own baselines |
+| `threshold` | `0.05` | Colour tolerance 0–1. `0.1` hid a real colour change on a faded button in testing |
+| `maxDiffPixels` / `maxDiffRatio` | `0` / `null` | Differences tolerated before a story counts as changed (above both limits) |
+| `allowSizeChange` | `false` | `true` stops a taller/shorter page from always counting as changed |
+| `include` / `exclude` / `excludeTags` | `[]` / `[]` / `['skip-visual']` | Skip stories by id substring or Storybook tag |
+| `hide` / `mask` / `ignoreRegions` / `waitFor` / `delay` | — | Prepare the page: hide or paint over changing parts, wait for an element |
+| `colorScheme` / `deviceScaleFactor` / `locale` / `timezoneId` | light / 1 / en-US / UTC | Capture environment |
+| `overrides` | `[]` | Change any of the above for matching stories, viewports or browsers; `skip: true` leaves them out |
+| `ui` | — | Dashboard defaults: `filter`, `view`, `zoom`, `theme`, `slider` |
+| `screenshot` | `{ fullPage: true, selector: null }` | Set `selector: '#storybook-root'` to crop to the component |
+| `css` | `''` | Extra CSS injected before capture |
+| `browser` | — | Shortcut overrides for Chromium entries: `executablePath`, `channel`, `args` (e.g. `--no-sandbox` in Docker) |
+
+```js
+overrides: [
+  { match: 'charts-', threshold: 0.2 },                       // noisy stories: more forgiving
+  { match: /^atoms-clock/, mask: ['.time'] },                 // paint over the changing part
+  { browser: ['firefox', 'webkit'], viewport: 'mobile', skip: true },   // other browsers: desktop only
+]
+```
+
+## Cross-browser testing
+
+```js
+export default {
+  browsers: ['chromium', 'firefox', 'webkit'],
+};
+```
+
+```bash
+npx playwright install chromium firefox webkit   # once per machine / CI image
+```
+
+- Snapshots are keyed `story__viewport__browser`, so every browser has its own baselines and approvals.
+  Approving a change in Chromium does not approve it in Firefox.
+- The dashboard has a browser filter, shows a per-browser "to review" count, and labels each snapshot.
+- If a configured browser isn't installed, `kitsune check` stops before capturing anything and tells you the
+  exact `npx playwright install <browser>` command.
+- Expect differences *between* browsers (fonts, form controls, scrollbars). That is normal: each browser is
+  compared only to its own baseline, so you are catching regressions, not cross-browser differences.
+- **WebKit is not Safari.** Playwright's WebKit build is the closest automated option, but on Linux it differs
+  from real Safari on macOS/iOS (fonts, some native controls). Treat it as a strong signal, not proof.
+- Baselines multiply by the number of browsers. Keep them in git LFS if the repo gets heavy.
+- Firefox and WebKit support is implemented and the multi-browser flow is tested, but the original test
+  environment could only run Chrome, so **Firefox/WebKit rendering has not been exercised yet**. Try them on
+  your machine first.
+
+Animations, transitions and carets are frozen automatically, fonts and images are awaited, and
+locale/timezone/viewport/scale are fixed.
+
+## Storybook tab (the addon)
+
+The package is also a Storybook addon. It adds a **Kitsune** tab next to Canvas and Docs that shows the review
+dashboard inside Storybook.
+
+```js
+// .storybook/main.js
+export default {
+  addons: [
+    { name: 'kitsune-review', options: { url: 'http://127.0.0.1:4455' } }, // `url` is optional
+  ],
+};
+```
+
+Run `npx kitsune serve` next to Storybook (local mode, default `http://127.0.0.1:4455`), or set `url` to your
+shared review server. The `KITSUNE_URL` environment variable works instead of the option.
+
+Until the package is on npm, install it from the tarball or folder: `npm i -D ./kitsune-review-0.1.0.tgz`.
+
+Tested: built and loaded in a real browser on Storybook 8.6 and 10.6 (react-vite). The preset picks the right
+manager import automatically (`@storybook/manager-api` on 8, `storybook/manager-api` on 9+). Sign-in inside the tab also works with the shared server when Storybook and the server are on the same site
+(both on localhost, or both under `*.yourcompany.com`). The review cookie is `SameSite=Strict`, so a server on a
+completely different domain will not keep you signed in inside the tab; open it in its own browser tab instead.
+Not tested: Storybook 7 or earlier, and non-React frameworks.
+
+## GitHub pull request check
+
+`kitsune check --github` posts a **`visual-review`** commit status on the PR, the same kind of check Chromatic adds:
+
+| When | Status | Example text |
+|---|---|---|
+| Capture starts | pending | `Capturing snapshots...` |
+| Everything approved | success | `All 18 snapshots approved (2 new)` |
+| Anything to review | failure | `4 changed - review needed (firefox: 4)` |
+| The check could not run (browser missing, Storybook unreachable) | error | `Visual check could not run: ...` |
+
+- Needs `GITHUB_TOKEN`, `GITHUB_REPOSITORY` and `GITHUB_SHA`, all provided in GitHub Actions (the job needs
+  `permissions: statuses: write`). On pull requests it uses the PR head commit, which is what branch protection reads.
+- `--review-url <url>` sets the "Details" link, `--sha <sha>` overrides the commit, `GITHUB_API_URL` supports GitHub Enterprise.
+- If a token or repo is missing it fails in under a second, before any capturing.
+- If GitHub itself is unreachable it only warns, so the real result and exit code are never hidden.
+- `--no-fail` keeps the CI job green but the status still reports the truth, so a required check still blocks merging.
+
+A ready-to-copy workflow is in `examples/visual-review.yml`. To block merging, mark `visual-review` as a required
+status check in branch protection (it appears in the list after the first run).
+
+**How approval works today:** the check fails, a developer runs `kitsune check` + `kitsune serve` locally, approves, and commits
+`.kitsune/baselines/` and `.kitsune/approved.json`. The next CI run matches the new baselines and turns green. Because approval
+is a commit, protect those paths with CODEOWNERS so a designer or lead must review baseline changes.
+The workflow uploads `.kitsune/current/` as an artifact so reviewers can see the CI screenshots and diffs.
+
+Baselines must be rendered by the same browser and fonts as CI, or you will get false diffs.
+Run both locally and in CI from one pinned Docker image (for example `mcr.microsoft.com/playwright`).
+
+## Shared review server (web approvals, per-branch baselines)
+
+Local mode keeps approvals in git. The review server replaces that with a shared service: CI uploads
+screenshots, reviewers approve in the browser, and the PR status turns green the moment someone approves.
+
+Needs Node 22.13+ (it uses the built-in `node:sqlite`). No Docker, no external database.
+
+```bash
+npm run build:dashboard
+npx kitsune server create-project web --repo acme/web --default-branch main --data ./kitsune-data
+# prints an UPLOAD token (CI secret) and a REVIEW token (for reviewers). Shown once; stored hashed.
+
+KITSUNE_GITHUB_TOKEN=ghp_xxx KITSUNE_PUBLIC_URL=https://kitsune.example.com \
+  npx kitsune server start --data ./kitsune-data --port 4456
+```
+
+In CI, upload instead of comparing locally (the server posts the `visual-review` status itself):
+
+```bash
+KITSUNE_URL=https://kitsune.example.com KITSUNE_UPLOAD_TOKEN=... npx kitsune check --remote
+```
+
+Reviewers open the server URL, sign in with the review token and their name, pick a build, and approve or reject.
+`npx kitsune server rotate-tokens web` issues new tokens.
+
+**Looking inside the database.** Everything is in one SQLite file, `kitsune-data/kitsune.db` (screenshots are
+separate files in `images/` and `diffs/`). `kitsune server inspect` reads it safely while the server runs:
+
+```bash
+npx kitsune server inspect                          # projects, latest builds, pending counts
+npx kitsune server inspect --build <build id>       # every snapshot in one build
+npx kitsune server inspect --approvals --branch main
+npx kitsune server inspect --sql "SELECT key, status, diff_pixels FROM snapshots WHERE status = 'changed'"
+```
+
+It opens the file read-only, accepts SELECT queries only, and never shows token or session data. Tables:
+`projects`, `builds`, `snapshots`, `approvals` (append-only history that decides each branch's baseline), `sessions`.
+You can also open `kitsune.db` in any SQLite tool such as DB Browser for SQLite.
+
+**Settings file.** Instead of long flag lists, put the server's settings in `kitsune.server.json` (port, folders, public
+URL, session length, dashboard defaults, automatic clean-up). Flags beat environment variables, which beat the file.
+Secrets such as the GitHub token stay in the environment. See
+[COMMANDS.md](./COMMANDS.md#server-settings-file-kitsuneserverjson).
+
+**Where files go, and keeping old ones tidy.** By default screenshots and diffs sit inside the data folder. Point
+them anywhere (a bigger disk, a mounted volume) and add a cold-storage folder for old builds:
+
+```bash
+npx kitsune server start --data ./kitsune-data \
+  --images-dir /mnt/volume/kitsune/images \
+  --diffs-dir  /mnt/volume/kitsune/diffs \
+  --archive-dir /mnt/volume/kitsune/archive
+
+npx kitsune server prune --older-than 30 --archive-dir /mnt/volume/kitsune/archive --dry-run   # preview
+npx kitsune server prune --older-than 30 --archive-dir /mnt/volume/kitsune/archive             # move old files
+npx kitsune server prune --older-than 90 --delete                                              # or delete them
+```
+
+`prune` only touches PNG files: database history stays complete. It never retires the current baseline of any
+story/branch, nor images used by builds newer than the cutoff. Archived files are still served when someone opens
+an old build; deleted ones show as a missing image. Run it from cron, or set `retention` in the settings file and the
+server does it by itself. Pass the same folder options to
+`server start` and `server prune` (or set `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR`).
+
+**How baselines work.** Images are stored once by content hash. Each approval is an append-only record, so a
+branch's baseline is its newest approval, falling back to the default branch. Approving on a feature branch never
+changes another branch. When a build on the default branch contains pixels already approved on another branch
+(the merge), they are accepted automatically instead of asking for a second review.
+
+| Env var | Purpose |
+|---|---|
+| `KITSUNE_DATA_DIR`, `KITSUNE_PORT`, `KITSUNE_HOST` | where the server stores data and listens |
+| `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR` | optional separate folders for screenshots, diffs and cold storage |
+| `KITSUNE_PUBLIC_URL` | links in PR statuses point here |
+| `KITSUNE_GITHUB_TOKEN` | token that may write commit statuses on the repo |
+| `KITSUNE_TRUST_PROXY=1` | read the client IP from `X-Forwarded-For` (set only behind your reverse proxy) |
+| `KITSUNE_URL`, `KITSUNE_UPLOAD_TOKEN` | used by `kitsune check --remote` in CI |
+
+Put Nginx or Caddy in front for TLS. The review cookie is HttpOnly and SameSite=Strict; the dashboard's write calls also
+require an `X-Requested-With` header. Login is limited to 10 failures per 15 minutes per IP.
+
+**Limits of this version.**
+- One shared review token per project, no user accounts or SSO. The name typed at sign-in is recorded with approvals but is not verified.
+- No "un-approve". A wrong approval is fixed by approving the right pixels again.
+- A stale approval on an old branch can win over a later change on the default branch for that branch only.
+- SQLite plus local disk means a single server. The storage code is isolated (`src/server/db.js` holds all SQL, image reads and writes go through one service) so Postgres/Mongo, S3, or a NestJS wrapper can be swapped in later.
+- Tested against a fake GitHub API, not real GitHub.
+
+## What this does not do (yet)
+
+- In local mode, share approvals between people (they are files in git). Use the review server above for that.
+- Real Safari: WebKit via Playwright is the nearest thing, but it is not the same as Safari on macOS/iOS.
+- Only retest affected stories (Chromatic's TurboSnap). Every run captures everything.
+
+## Layout
+
+```
+bin/kitsune.js        CLI entry            src/check.js     run + approve/reject logic
+src/capture.js        Playwright capture   src/compare.js   pixelmatch diff
+src/rules.js          per-story rules      src/regions.js   ignore regions
+src/config.js         config + validation  src/server.js    local review API
+src/server/           shared review server (app, service, db, storage, prune, settings)
+dashboard/            React + Vite UI (local and remote modes, slider, themes)
+addon/                Storybook tab        examples/        mock Storybook + config
+COMMANDS.md           every command and setting      llms.txt / llms-full.txt   docs for AI tools
+```
+
+## Author
+
+Made by **Richie Flicker**.
+
+## Licence
+
+Copyright (c) 2026 Richie Flicker. Released under the **MIT licence** ([LICENSE](./LICENSE)).
+
+In plain words: you and anyone else may use, copy, change, share and even sell Kitsune Review, as long as the
+copyright notice and the licence text stay with it. It comes with no warranty. Every source file carries an SPDX line
+(`SPDX-License-Identifier: MIT`) and the copyright notice. The package stays marked `private` until it is published to npm.
+
+---
+
+# 🦊 Kitsune commands
+
+A plain-English guide to every command. Run them with `npx kitsune <command>` (or the npm scripts in your project).
+Add `-c path/to/kitsune.config.js` before the command if your config is not in the current folder:
+
+```bash
+npx kitsune -c ./kitsune.config.js check
+```
+
+**The idea in one paragraph.** `check` opens every story of your *built* Storybook, takes screenshots, and compares
+them with the approved ones (the "baselines"). The very first screenshot of a story is approved automatically. If a
+story looks different later, it is marked **changed** and the check fails until a person approves or fixes it.
+
+```
+build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  →  next check passes
+```
+
+---
+
+## Everyday commands (local, no server)
+
+| Command | What it does |
+|---|---|
+| `kitsune init` | Creates a starter `kitsune.config.js` in the current folder. Run once per project. |
+| `kitsune check` | Captures every story, compares with baselines, prints a summary. **Exits with code 1 if anything needs review**, which is what makes CI fail. |
+| `kitsune serve` | Opens the review dashboard (default http://127.0.0.1:4455): before/after, slider, diff, approve/reject. |
+| `kitsune approve [keys…]` | Approves changed stories; the new screenshot becomes the baseline. |
+| `kitsune reject <keys…>` | Marks changed stories as rejected. The check keeps failing for them. |
+| `kitsune status` | Shows the result of the last check without running it again. |
+
+### `kitsune check`
+Build Storybook first (`npm run build-storybook`), because Kitsune reads the static build.
+
+| Option | Meaning |
+|---|---|
+| `--no-fail` | Always exit 0, even with changes. Useful for a first look. |
+| `--github` | Post a `visual-review` commit status to GitHub (needs `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_SHA`). |
+| `--sha <sha>` | Commit to attach the GitHub status to (default: PR head, else `GITHUB_SHA`). |
+| `--review-url <url>` | Link shown as "Details" on the GitHub status (or set `KITSUNE_REVIEW_URL`). |
+| `--remote` | Upload to the shared review server instead of comparing locally (see *Shared server*). |
+| `--branch <name>` | Branch name for `--remote` (default: detected from CI/git). |
+| `--commit <sha>` | Commit for `--remote` (default: PR head / `GITHUB_SHA` / git). |
+
+Result words you will see:
+
+| Status | Meaning |
+|---|---|
+| `new` | First capture of a story. Approved automatically as its baseline. |
+| `unchanged` | Same as the baseline (within `threshold` / `maxDiffPixels`). |
+| `changed` | Differs from the baseline. Needs a decision. |
+| `accepted` | Was changed, then approved. |
+| `rejected` | Was changed, then rejected. Still fails. |
+| `error` | The story could not render (the message says why). Fix the story. |
+
+### `kitsune serve`
+`-p, --port <port>`: port for the dashboard (default 4455).
+Keyboard: `j`/`k` next/previous, `a` approve, `r` reject.
+
+### `kitsune approve` / `reject`
+```bash
+npx kitsune approve --all                      # approve every changed story
+npx kitsune approve atoms-button--primary__desktop__chromium
+npx kitsune reject  atoms-button--primary__desktop__chromium
+```
+A *key* is `<story id>__<viewport>__<browser>`, as printed by `check`. The dashboard is usually easier.
+
+### `kitsune status`
+Prints the build and the summary counts from the last `check`.
+
+---
+
+## Shared server (web approvals for a team / CI)
+
+Use this when CI runs the check and people approve from a browser. It needs Node 22.13 or newer.
+Everything is stored in one folder: a SQLite database plus PNG files.
+
+| Command | What it does |
+|---|---|
+| `kitsune server create-project <name>` | Creates a project and prints an **upload token** (for CI) and a **review token** (for reviewers). Shown once. |
+| `kitsune server start` | Starts the dashboard + API (default http://127.0.0.1:4456). |
+| `kitsune server rotate-tokens <name>` | Issues new tokens. Old ones stop working and review sessions are signed out. |
+| `kitsune server inspect` | Read-only look inside the database. Safe while the server runs. |
+| `kitsune server prune` | Moves or deletes the files of old builds to save disk space. |
+
+Typical flow:
+
+```bash
+# 1. on the server, once
+npx kitsune server create-project web --repo yourname/yourrepo
+npx kitsune server start --data ./kitsune-data
+
+# 2. in CI, after build-storybook
+KITSUNE_URL=https://review.example.com KITSUNE_UPLOAD_TOKEN=kitsune_up_… npx kitsune check --remote
+
+# 3. reviewers open the server URL, sign in with the review token, approve or reject
+```
+
+### Options shared by the `server` commands
+| Option | Meaning |
+|---|---|
+| `--data <dir>` | Data folder (database + files). Default `./kitsune-data`, or `KITSUNE_DATA_DIR`. |
+| `--images-dir <dir>` | Where screenshots go (default `<data>/images`, or `KITSUNE_IMAGES_DIR`). |
+| `--diffs-dir <dir>` | Where diff images go (default `<data>/diffs`, or `KITSUNE_DIFFS_DIR`). |
+| `--archive-dir <dir>` | Cold storage for old files (or `KITSUNE_ARCHIVE_DIR`). |
+| `--server-config <file>` | Settings file (default: `kitsune.server.json` in the current folder). See *Server settings file*. |
+
+`server start` also takes `-p, --port` (default 4456) and `--host` (default `127.0.0.1`; keep it that way behind a
+reverse proxy). `create-project` takes `--repo <owner/repo>` (GitHub statuses) and `--default-branch <branch>`
+(default `main`: every branch falls back to its baselines).
+
+Use the **same** folder options for `start` and `prune`, otherwise they look in different places.
+
+### `kitsune server inspect`
+```bash
+npx kitsune server inspect                        # projects, latest builds, pending counts
+npx kitsune server inspect --build <build id>     # every snapshot in one build
+npx kitsune server inspect --approvals --branch main
+npx kitsune server inspect --sql "SELECT key, status FROM snapshots WHERE status = 'changed'"
+```
+`--limit <n>` changes how many rows are shown. Only SELECT queries run, and tokens are never shown.
+
+### `kitsune server prune`
+```bash
+npx kitsune server prune --older-than 30 --archive-dir ./archive --dry-run   # preview, changes nothing
+npx kitsune server prune --older-than 30 --archive-dir ./archive             # move old files
+npx kitsune server prune --older-than 90 --delete                            # delete instead
+npx kitsune server prune                                                     # use retention.* from kitsune.server.json
+```
+- Only PNG files are touched; build history in the database stays complete.
+- The **current baseline of every story and branch** and everything used by newer builds are never removed.
+- Archived files are still shown when someone opens the old build; deleted ones show as a missing image.
+- It refuses to run unless you give an archive folder or `--delete`.
+- Prefer not to use cron? Set `retention` in the server settings file and the server does this by itself.
+
+---
+
+## Configuration reference (`kitsune.config.js`)
+
+Everything below is optional. `kitsune check` stops with a clear message if a value is wrong (for example a threshold
+above 1, or a misspelled option inside `overrides`).
+
+### Basics
+| Key | Meaning |
+|---|---|
+| `storybook.dir` / `storybook.url` | The built Storybook folder (e.g. `./storybook-static`) or a running Storybook URL. Use one. |
+| `viewports` | Sizes to capture: `[{ name: 'desktop', width: 1280, height: 720 }, …]`. Names must be unique. |
+| `browsers` | `chromium`, `firefox`, `webkit` (install with `npx playwright install firefox webkit`). |
+| `include` / `exclude` / `excludeTags` | Which stories to capture (id fragments). Stories tagged `skip-visual` are skipped. |
+| `concurrency` | Stories captured at once (default 4). |
+| `dataDir` | Local results (default `.kitsune`): `baselines/` (commit this to git), `approved.json`, `current/`. |
+| `remote.url` | Review server address (or `KITSUNE_URL`). |
+
+### Capture environment (same for every screenshot)
+| Key | Default | Meaning |
+|---|---|---|
+| `colorScheme` | `'light'` | `'light'`, `'dark'` or `'no-preference'` (what `prefers-color-scheme` reports). |
+| `reducedMotion` | `'reduce'` | `'reduce'` or `'no-preference'`. |
+| `locale`, `timezoneId` | `'en-US'`, `'UTC'` | Keeps dates and number formats stable between machines. |
+| `deviceScaleFactor` | `1` | `2` gives retina screenshots (sharper diffs, bigger files). |
+| `freezeAnimations` | `true` | Stops CSS animations and transitions before the screenshot. |
+| `waitForFonts` | `true` | Waits for web fonts and image decoding. |
+
+### What happens on the page before the screenshot
+Each of these can also be set for particular stories in `overrides` (lists add to the global ones, single values replace).
+
+| Key | Meaning |
+|---|---|
+| `delay`, `timeout` | Extra wait after render (ms, default 100); max wait per story (ms, default 30000). |
+| `waitFor` | CSS selector that must exist first, e.g. `'[data-loaded]'`. The story errors if it never appears. |
+| `hide` | Selectors set to `visibility: hidden` (layout stays). Good for clocks, avatars, ads. |
+| `mask` | Selectors painted over with `maskColor` (default `#ff00ff`), same size, so layout still counts. |
+| `ignoreRegions` | `[{ x, y, width, height }]` in screenshot pixels, painted solid in every screenshot. |
+| `css` | Extra CSS injected before the screenshot. |
+| `screenshot` | `{ fullPage, selector }`: whole page (default) or just one element. |
+
+> **Changing `hide`, `mask`, `ignoreRegions` or `css` changes the screenshots**, so the first check afterwards will
+> report differences against your old baselines. Re-approve once (`kitsune approve --all`) after changing them.
+
+### How screenshots are compared
+| Key | Default | Meaning |
+|---|---|---|
+| `threshold` | `0.05` | Per-pixel colour tolerance, 0 (strict) to 1 (loose). |
+| `maxDiffPixels` | `0` | Pixels allowed to differ. |
+| `maxDiffRatio` | `null` | Share of the page allowed to differ (`0.001` = 0.1%). A story is *changed* only above **both** limits. |
+| `includeAA` | `false` | `true` also counts anti-aliased edge pixels. |
+| `allowSizeChange` | `false` | By default a page that got taller or shorter is always *changed*. `true` judges it by pixels like any other change. |
+
+### Per-story `overrides`
+```js
+overrides: [
+  { match: 'charts-', threshold: 0.2, maxDiffPixels: 200 },          // noisy charts: be more forgiving
+  { match: /^atoms-clock/, mask: ['.time'] },                        // hide the changing part
+  { match: 'modal', viewports: ['desktop'], delay: 400, waitFor: '[role=dialog]' },   // only desktop, wait for it
+  { match: 'legacy-', skip: true },                                  // not captured at all
+  { match: 'hero', viewport: 'mobile', browser: 'webkit', ignoreRegions: [{ x: 0, y: 0, width: 390, height: 60 }] },
+]
+```
+- `match` is a fragment of the story id or title, a RegExp, a list of those, or a function `(story) => boolean`.
+- `viewport` / `browser` narrow *where* the override applies. `viewports` limits which viewports run for the match.
+- Later entries win. Allowed options: `skip, viewports, delay, timeout, waitFor, hide, mask, css, fullPage, selector,
+  ignoreRegions, threshold, maxDiffPixels, maxDiffRatio, includeAA, allowSizeChange`.
+- Stories skipped here are not counted and not uploaded with `--remote`.
+- With `--remote`, each story's comparison rules travel with its screenshot, so the server judges it the same way.
+
+### Review dashboard (`ui`)
+Project defaults. Each reviewer's own choices (view, zoom, theme) are remembered in their browser and win over these.
+
+```js
+ui: {
+  filter: 'review',          // first list: 'review' | 'new' | 'accepted' | 'unchanged' | 'all'
+  view: 'side',              // 'side' | 'slider' | 'diff' | 'new' | 'baseline'
+  zoom: 'fit',               // 'fit' | 'actual' (1:1 pixels)
+  theme: 'auto',             // 'auto' | 'light' | 'dark'
+  slider: {
+    start: 50,               // % of the baseline shown on open (100 = all baseline, 0 = all new)
+    blinkMs: 700,            // how long each image stays up in Blink
+    highlight: false,        // start with changed pixels highlighted
+    highlightOpacity: 0.85,  // 0..1
+  },
+}
+```
+With the shared server, set `ui` in the server settings file instead (below).
+
+## Server settings file (`kitsune.server.json`)
+
+Put it in the folder you start the server from (or pass `--server-config <file>`). Secrets are never read from it:
+the GitHub token stays in `KITSUNE_GITHUB_TOKEN`. For every setting the order is
+**command-line flag → environment variable → this file → built-in default**.
+
+```json
+{
+  "port": 4456,
+  "host": "127.0.0.1",
+  "dataDir": "./kitsune-data",
+  "imagesDir": "/mnt/volume/kitsune/images",
+  "diffsDir": "/mnt/volume/kitsune/diffs",
+  "archiveDir": "/mnt/volume/kitsune/archive",
+  "publicUrl": "https://review.example.com",
+  "trustProxy": true,
+  "sessionDays": 7,
+  "github": { "apiUrl": "https://api.github.com" },
+  "retention": { "olderThanDays": 30, "mode": "archive", "everyHours": 24 },
+  "ui": { "view": "slider", "theme": "auto", "slider": { "start": 50 } }
+}
+```
+
+| Setting | Meaning |
+|---|---|
+| `port`, `host` | Where the server listens (env `KITSUNE_PORT`, `KITSUNE_HOST`). |
+| `dataDir`, `imagesDir`, `diffsDir`, `archiveDir` | Folders (env `KITSUNE_DATA_DIR`, `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR`). Relative paths are relative to the settings file. |
+| `publicUrl` | Public address. PR statuses link here and cookies become `Secure` on https (env `KITSUNE_PUBLIC_URL`). |
+| `trustProxy` | `true` when behind your own reverse proxy, so the real client IP is used (env `KITSUNE_TRUST_PROXY=1`). |
+| `sessionDays` | How long a reviewer stays signed in (1 to 90, default 7). |
+| `github.apiUrl` | GitHub API address, for GitHub Enterprise (env `KITSUNE_GITHUB_API_URL`). |
+| `retention` | **Automatic clean-up**: the server itself archives (`"archive"`, needs `archiveDir`) or deletes (`"delete"`) the files of builds older than `olderThanDays`, once at start and then every `everyHours`. Same safety rules as `server prune`. No cron needed. |
+| `ui` | Dashboard defaults for everyone (same keys as `ui` above). |
+
+A misspelled or invalid setting stops the server from starting with a message that names it.
+
+## Environment variables
+
+| Variable | Used by | Purpose |
+|---|---|---|
+| `KITSUNE_BROWSER_PATH` | check | Use an installed Chrome instead of Playwright's Chromium. |
+| `KITSUNE_URL`, `KITSUNE_UPLOAD_TOKEN` | check `--remote` | Server address and upload token (CI secret). |
+| `KITSUNE_REVIEW_URL` | check `--github` | Link on the GitHub status. |
+| `KITSUNE_DATA_DIR`, `KITSUNE_PORT`, `KITSUNE_HOST` | server | Data folder, port, interface. |
+| `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR` | server | Separate folders for files. |
+| `KITSUNE_PUBLIC_URL` | server | Public address (see `publicUrl`). |
+| `KITSUNE_GITHUB_TOKEN` | server | Token allowed to write commit statuses (never in a file). |
+| `KITSUNE_GITHUB_API_URL` | server | GitHub API address. |
+| `KITSUNE_TRUST_PROXY=1` | server | Read client IP from `X-Forwarded-For` (only behind your own reverse proxy). |
+| `KITSUNE_TAB=1` | Storybook | Show the Kitsune tab inside Storybook (when your `main.js` opts in). |
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `error … React is not defined` / `X is not defined` | A story has a code bug. Fix the story, rebuild Storybook, check again. |
+| Everything is `changed` after a rebuild | Fonts or animations differ. Use `css` to freeze animations and wait for fonts with `delay`. |
+| `Expected N snapshots but received M` (remote) | Upload was cut off. Run the check again. |
+| Server will not start | Needs Node 22.13+. Run `nvm use` in the project. |
+| Dashboard says "No build to review" | Run `kitsune check` first. |
