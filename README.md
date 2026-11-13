@@ -30,7 +30,7 @@ npm run example:check                  # green again
 ## Use it on a real project
 
 1. `npx storybook build` (produces `storybook-static/`).
-2. `npx kitsune init`: creates `kitsune.config.js` (set `storybook.dir`, viewports) and adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to your `package.json`. It never overwrites a script you already have; use `--no-scripts` to leave `package.json` alone.
+2. `npx kitsune init`: creates `kitsune.config.js` (set `storybook.dir`, viewports) and adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to your `package.json`. It also adds the addon to the `addons` list in `.storybook/main.*` when that is a plain `addons: [ ... ]` array (otherwise it prints the line to add). It never overwrites a script you already have; `--no-scripts` leaves `package.json` alone and `--no-storybook` leaves `.storybook/main.*` alone.
 3. `npx kitsune check` → `npx kitsune serve`.
 4. Commit `.kitsune/baselines/` and `.kitsune/approved.json`. Ignore `.kitsune/current/`.
 

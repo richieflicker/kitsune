@@ -11,7 +11,7 @@ import { describeManifest, githubContext, postStatusSafely } from './github.js';
 import { runRemoteCheck } from './remote.js';
 import { startServer } from './server.js';
 import { createStore } from './store.js';
-import { addProjectScripts } from './init.js';
+import { ADDON_SNIPPET, addProjectScripts, addStorybookAddon } from './init.js';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 
@@ -53,8 +53,9 @@ export async function main(argv) {
 
   program
     .command('init')
-    .description('Create a starter kitsune.config.js and add kitsune:* scripts to package.json')
+    .description('Create a starter kitsune.config.js, add kitsune:* scripts to package.json and the addon to .storybook/main.*')
     .option('--no-scripts', 'do not touch package.json')
+    .option('--no-storybook', 'do not touch .storybook/main.*')
     .action((opts) => {
       const file = path.resolve('kitsune.config.js');
       if (fs.existsSync(file)) {
@@ -81,16 +82,24 @@ export async function main(argv) {
       );
       console.log('Created kitsune.config.js');
       }
-      if (!opts.scripts) return;
-      const r = addProjectScripts(path.resolve('package.json'));
-      if (r.status === 'no-package-json') console.log('No package.json here, so no scripts were added.');
-      else if (r.status === 'unreadable') console.log('package.json could not be read as JSON, so no scripts were added.');
-      else {
-        if (r.added.length) console.log(`Added to package.json: ${r.added.map((s) => `npm run ${s}`).join(', ')}`);
-        if (r.kept.length) console.log(`Kept your own versions of: ${r.kept.join(', ')}`);
+      if (opts.scripts) {
+        const r = addProjectScripts(path.resolve('package.json'));
+        if (r.status === 'no-package-json') console.log('No package.json here, so no scripts were added.');
+        else if (r.status === 'unreadable') console.log('package.json could not be read as JSON, so no scripts were added.');
+        else {
+          if (r.added.length) console.log(`Added to package.json: ${r.added.map((s) => `npm run ${s}`).join(', ')}`);
+          if (r.kept.length) console.log(`Kept your own versions of: ${r.kept.join(', ')}`);
+        }
+      }
+      if (opts.storybook) {
+        const sb = addStorybookAddon(process.cwd());
+        if (sb.status === 'added') console.log(`Added the Kitsune addon to .storybook/${sb.file} (Kitsune tab and "Run visual tests" panel).`);
+        else if (sb.status === 'present') console.log(`.storybook/${sb.file} already mentions kitsune-review, left as it is.`);
+        else if (sb.status === 'manual') console.log(`Could not edit .storybook/${sb.file} safely. Add this to its addons list:\n  ${ADDON_SNIPPET},`);
+        else console.log(`No .storybook/main.* found. When you have one, add to its addons list:\n  ${ADDON_SNIPPET},`);
       }
       console.log('\nNext: npm run kitsune:browsers (only for Firefox/WebKit), build Storybook, then npm run kitsune:check.');
-      console.log('Storybook tab and testing panel: add { name: \'kitsune-review\', options: { url: \'http://127.0.0.1:4455\' } } to addons in .storybook/main.js and run `npm run kitsune:serve`.');
+      console.log('For the Storybook tab, keep `npm run kitsune:serve` running next to Storybook.');
     });
 
   program

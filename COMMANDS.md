@@ -21,7 +21,7 @@ build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  
 
 | Command | What it does |
 |---|---|
-| `kitsune init [--no-scripts]` | Creates a starter `kitsune.config.js` and adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to `package.json` (existing scripts are never overwritten). Safe to run again. |
+| `kitsune init [--no-scripts] [--no-storybook]` | Creates a starter `kitsune.config.js`, adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to `package.json` (existing scripts are never overwritten) and adds the `kitsune-review` addon to `.storybook/main.*` when it is a plain `addons: [ ... ]` array (otherwise it prints the line). Safe to run again. |
 | `kitsune browsers [names...]` | Installs Playwright browsers using the Playwright that Kitsune itself uses. Default: `firefox webkit`. |
 | `kitsune check` | Captures every story, compares with baselines, prints a summary. **Exits with code 1 if anything needs review**, which is what makes CI fail. |
 | `kitsune serve` | Opens the review dashboard (default http://127.0.0.1:4455): before/after, slider, diff, approve/reject. |

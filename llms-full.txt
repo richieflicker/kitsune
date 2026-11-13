@@ -37,7 +37,7 @@ npm run example:check                  # green again
 ## Use it on a real project
 
 1. `npx storybook build` (produces `storybook-static/`).
-2. `npx kitsune init`: creates `kitsune.config.js` (set `storybook.dir`, viewports) and adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to your `package.json`. It never overwrites a script you already have; use `--no-scripts` to leave `package.json` alone.
+2. `npx kitsune init`: creates `kitsune.config.js` (set `storybook.dir`, viewports) and adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to your `package.json`. It also adds the addon to the `addons` list in `.storybook/main.*` when that is a plain `addons: [ ... ]` array (otherwise it prints the line to add). It never overwrites a script you already have; `--no-scripts` leaves `package.json` alone and `--no-storybook` leaves `.storybook/main.*` alone.
 3. `npx kitsune check` → `npx kitsune serve`.
 4. Commit `.kitsune/baselines/` and `.kitsune/approved.json`. Ignore `.kitsune/current/`.
 
@@ -356,7 +356,7 @@ build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  
 
 | Command | What it does |
 |---|---|
-| `kitsune init [--no-scripts]` | Creates a starter `kitsune.config.js` and adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to `package.json` (existing scripts are never overwritten). Safe to run again. |
+| `kitsune init [--no-scripts] [--no-storybook]` | Creates a starter `kitsune.config.js`, adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to `package.json` (existing scripts are never overwritten) and adds the `kitsune-review` addon to `.storybook/main.*` when it is a plain `addons: [ ... ]` array (otherwise it prints the line). Safe to run again. |
 | `kitsune browsers [names...]` | Installs Playwright browsers using the Playwright that Kitsune itself uses. Default: `firefox webkit`. |
 | `kitsune check` | Captures every story, compares with baselines, prints a summary. **Exits with code 1 if anything needs review**, which is what makes CI fail. |
 | `kitsune serve` | Opens the review dashboard (default http://127.0.0.1:4455): before/after, slider, diff, approve/reject. |

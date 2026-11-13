@@ -41,3 +41,30 @@ export function addProjectScripts(packageJsonPath) {
   }
   return { status: 'ok', added, kept };
 }
+
+const MAIN_FILES = ['main.js', 'main.mjs', 'main.cjs', 'main.ts', 'main.mts'];
+export const ADDON_SNIPPET = "{ name: 'kitsune-review', options: { url: 'http://127.0.0.1:4455' } }";
+
+/**
+ * Add the Kitsune addon to .storybook/main.* when there is exactly one plain `addons: [ ... ]` array.
+ * Anything else (computed lists, several matches, already present) is left alone and reported.
+ */
+export function addStorybookAddon(dir) {
+  const name = MAIN_FILES.find((f) => fs.existsSync(`${dir}/.storybook/${f}`));
+  if (!name) return { status: 'no-config' };
+  const file = `${dir}/.storybook/${name}`;
+  const src = fs.readFileSync(file, 'utf8');
+  if (src.includes('kitsune-review')) return { status: 'present', file: name };
+  const matches = [...src.matchAll(/(["']?)addons\1\s*:\s*\[/g)];
+  if (matches.length !== 1) return { status: 'manual', file: name };
+  const m = matches[0];
+  const at = m.index + m[0].length;
+  // Match the indentation of the line the array starts on, plus two spaces.
+  const lineStart = src.lastIndexOf('\n', m.index) + 1;
+  const indent = `${/^[ \t]*/.exec(src.slice(lineStart))[0]}  `;
+  const rest = src.slice(at);
+  const empty = /^\s*\]/.test(rest);
+  const insert = empty ? `\n${indent}${ADDON_SNIPPET},\n${indent.slice(2)}` : `\n${indent}${ADDON_SNIPPET},`;
+  fs.writeFileSync(file, src.slice(0, at) + insert + (empty ? rest.replace(/^\s*/, '') : rest));
+  return { status: 'added', file: name };
+}
