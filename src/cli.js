@@ -304,6 +304,34 @@ export async function main(argv) {
     });
   });
 
+  // Short form: `kitsune user add "Asha"`. The project is optional when the server has only one.
+  const user = program.command('user').description('Manage who can sign in to the shared review server (personal review tokens)');
+  const projectOption = ['--project <name>', 'project (optional when there is only one)'];
+
+  withFolders(user.command('add <name>').description('Give a person a personal review token (shown once)').option(...projectOption)).action(async (name, opts) => {
+    await withService(opts, (svc) => {
+      const r = svc.addReviewer(svc.projectNameOrOnly(opts.project), name);
+      console.log(`Added "${r.name}" to project "${r.project.name}".\n\nSend them this token privately. It is stored hashed and cannot be shown again.\n`);
+      console.log(`  Personal review token : ${r.token}`);
+      console.log('\nThey sign in at your review server address and paste it into "Review token".');
+    });
+  });
+
+  withFolders(user.command('list').description('Show who has a personal token').option(...projectOption)).action(async (opts) => {
+    await withService(opts, (svc) => {
+      const rows = svc.listReviewers(svc.projectNameOrOnly(opts.project));
+      if (!rows.length) return console.log('Nobody yet. Add someone with: kitsune user add "<name>"');
+      for (const r of rows) console.log(`${r.revoked_at ? 'revoked' : 'active '}  ${r.name}  (added ${r.created_at.slice(0, 10)}${r.revoked_at ? `, revoked ${r.revoked_at.slice(0, 10)}` : ''})`);
+    });
+  });
+
+  withFolders(user.command('revoke <name>').description("Remove one person's access and sign them out").option(...projectOption)).action(async (name, opts) => {
+    await withService(opts, (svc) => {
+      const r = svc.revokeReviewer(svc.projectNameOrOnly(opts.project), name);
+      console.log(`Revoked "${r.name}". Their sessions are signed out.`);
+    });
+  });
+
   withFolders(
     server
       .command('prune')

@@ -216,11 +216,14 @@ Reviewers open the server URL, sign in, pick a build, and approve or reject. Giv
 approvals carry a verified name and one person can be removed without touching the others:
 
 ```bash
-npx kitsune server add-reviewer web "Asha" --data ./kitsune-data     # prints Asha's token once
-npx kitsune server list-reviewers web --data ./kitsune-data
-npx kitsune server revoke-reviewer web "Asha" --data ./kitsune-data  # signs only Asha out
-npx kitsune server disable-shared-token web --data ./kitsune-data    # optional: personal tokens only
+npx kitsune user add "Asha"        # prints Asha's token once
+npx kitsune user list
+npx kitsune user revoke "Asha"     # signs only Asha out
+npx kitsune server disable-shared-token web   # optional: personal tokens only
 ```
+
+The project is picked automatically when the server has only one (otherwise add `--project <name>`), and the data
+folder defaults to `./kitsune-data` (override with `--data`, `KITSUNE_DATA_DIR` or the settings file).
 
 A personal token already carries the name, so the sign-in screen only asks for a name when the shared review token is
 used. Add `--public-project web` to `server start` if anyone should be able to look at the builds read-only without

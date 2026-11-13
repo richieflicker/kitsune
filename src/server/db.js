@@ -124,6 +124,7 @@ export async function openDb(dataDir) {
     insertProject: p(`INSERT INTO projects (id,name,default_branch,github_repo,upload_token_hash,review_token_hash,created_at) VALUES (?,?,?,?,?,?,?)`),
     projectById: p(`SELECT * FROM projects WHERE id = ?`),
     projectByName: p(`SELECT * FROM projects WHERE name = ?`),
+    allProjects: p(`SELECT * FROM projects ORDER BY created_at`),
     projectByUploadHash: p(`SELECT * FROM projects WHERE upload_token_hash = ?`),
     projectByReviewHash: p(`SELECT * FROM projects WHERE review_token_hash = ?`),
     setReviewHash: p(`UPDATE projects SET review_token_hash = ? WHERE id = ?`),
@@ -197,6 +198,7 @@ export async function openDb(dataDir) {
     insertProject: (r) => q.insertProject.run(r.id, r.name, r.defaultBranch, r.githubRepo, r.uploadHash, r.reviewHash, r.createdAt),
     projectById: (id) => q.projectById.get(id),
     projectByName: (name) => q.projectByName.get(name),
+    allProjects: () => q.allProjects.all(),
     projectByUploadHash: (h) => q.projectByUploadHash.get(h),
     projectByReviewHash: (h) => q.projectByReviewHash.get(h),
     setTokens(id, uploadHash, reviewHash) {

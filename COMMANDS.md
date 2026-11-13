@@ -91,6 +91,7 @@ Everything is stored in one folder: a SQLite database (projects, reviewers, sess
 |---|---|
 | `kitsune server create-project <name>` | Creates a project and prints an **upload token** (for CI) and a **review token** (for reviewers). Shown once. |
 | `kitsune server start` | Starts the dashboard + API (default http://127.0.0.1:4456). |
+| `kitsune user add <name>` / `user list` / `user revoke <name>` | Short form of the three commands below. The project is optional when there is only one (`--project <name>` otherwise); the data folder defaults to `./kitsune-data`. |
 | `kitsune server add-reviewer <project> <name>` | Issues a **personal review token** (shown once). Approvals are recorded under that name, and typing another name does nothing. |
 | `kitsune server list-reviewers <project>` | Shows who has a personal token (active or revoked). |
 | `kitsune server revoke-reviewer <project> <name>` | Revokes one person's token and signs only them out. |

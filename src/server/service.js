@@ -156,6 +156,15 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       return token ? db.projectByUploadHash(sha256(token)) ?? null : null;
     },
 
+    /** The project to act on: the named one, or the only one when there is exactly one. */
+    projectNameOrOnly(name) {
+      if (name) return name;
+      const all = db.allProjects();
+      if (all.length === 1) return all[0].name;
+      if (!all.length) throw new HttpError(404, 'No project yet. Create one with: kitsune server create-project <name>');
+      throw new HttpError(400, `Several projects exist (${all.map((p) => p.name).join(', ')}). Pick one with --project <name>.`);
+    },
+
     // ---------- per-person review tokens ----------
     addReviewer(projectName, personName) {
       const project = db.projectByName(projectName);
