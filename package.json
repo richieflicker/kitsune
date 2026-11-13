@@ -1,0 +1,74 @@
+{
+  "name": "kitsune-review",
+  "version": "0.1.0",
+  "description": "Self-hosted visual regression review for Storybook: capture every story, diff against approved baselines, approve in the browser. Includes a Storybook tab.",
+  "scripts": {
+    "build:dashboard": "npm --prefix dashboard install --no-audit --no-fund && npm --prefix dashboard run build",
+    "dev:dashboard": "npm --prefix dashboard run dev",
+    "example:check": "node bin/kitsune.js -c examples/kitsune.config.js check",
+    "example:serve": "node bin/kitsune.js -c examples/kitsune.config.js serve",
+    "build:llms": "node scripts/build-llms.mjs"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "kitsune": "./bin/kitsune.js"
+  },
+  "dependencies": {
+    "commander": "^15.1.0",
+    "pixelmatch": "^8.0.0",
+    "playwright": "^1.65.0",
+    "pngjs": "^7.0.0"
+  },
+  "private": true,
+  "keywords": [
+    "storybook-addon",
+    "test",
+    "visual-testing",
+    "visual-regression",
+    "storybook",
+    "playwright",
+    "screenshot",
+    "chromatic-alternative"
+  ],
+  "storybook": {
+    "displayName": "Kitsune Review",
+    "supportedFrameworks": [
+      "react",
+      "vue",
+      "angular",
+      "web-components",
+      "html",
+      "svelte",
+      "preact"
+    ]
+  },
+  "exports": {
+    "./preset": "./preset.cjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "addon",
+    "dashboard/dist",
+    "preset.cjs",
+    "README.md",
+    "COMMANDS.md",
+    "llms.txt",
+    "llms-full.txt",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "author": "Richie Flicker",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/richieflicker/kitsune.git"
+  },
+  "bugs": {
+    "url": "https://github.com/richieflicker/kitsune/issues"
+  },
+  "homepage": "https://github.com/richieflicker/kitsune#readme"
+}
