@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { captureAll } from './capture.js';
 import { git } from './ci.js';
 import { comparePngs } from './compare.js';
+import { REJECT_AFTER_APPROVE_MESSAGE, reviewTransition } from './review-rules.js';
 import { compareRules, exceedsAllowance, resolveRules } from './rules.js';
 import { createStore, storyKey, summarize } from './store.js';
 import { fetchStories, filterStories, resolveStorybook } from './storybook.js';
@@ -131,7 +132,6 @@ export function review(cfg, action, keys) {
   if (!manifest) throw new Error('No results yet. Run `kitsune check` first.');
 
   const approved = store.readApproved();
-  const pending = (s) => s.status === 'changed' || s.status === 'rejected';
   // Bulk approve only touches stories still awaiting a decision. Anything a reviewer explicitly
   // rejected stays rejected until they approve it by name.
   const targets =
@@ -140,19 +140,24 @@ export function review(cfg, action, keys) {
   const missing = Array.isArray(keys) ? keys.filter((k) => !manifest.stories.some((s) => s.key === k)) : [];
   if (missing.length) throw new Error(`Unknown story key(s): ${missing.join(', ')}`);
 
+  // Check everything first so a refused request changes nothing.
+  if (action === 'reject' && keys !== 'all') {
+    const done = targets.filter((s) => s.status === 'accepted').map((s) => s.key);
+    if (done.length) throw new Error(`Cannot reject ${done.join(', ')}: ${REJECT_AFTER_APPROVE_MESSAGE}`);
+  }
+
   for (const s of targets) {
+    const next = reviewTransition(s.status, action);
+    if (!next) continue; // nothing to do for this story (unchanged, new, error, ...)
     if (action === 'approve') {
-      if (!pending(s)) continue; // nothing to approve on unchanged/new/error
       fs.copyFileSync(store.newFile(s.key), store.baselineFile(s.key));
       approved[s.key] = {
         buildId: manifest.buildId,
         approvedAt: new Date().toISOString(),
         approvedBy: process.env.USER || process.env.USERNAME || 'local',
       };
-      s.status = 'accepted';
-    } else if (action === 'reject') {
-      if (s.status === 'changed' || s.status === 'accepted') s.status = 'rejected';
     }
+    s.status = next;
   }
 
   manifest.summary = summarize(manifest.stories);

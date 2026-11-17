@@ -24,6 +24,11 @@ const MIME = {
 /** Only pages served from this machine (Storybook on localhost:6006, say) may call the API cross-origin. */
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
+/** The Host header must also be local. Otherwise DNS rebinding lets any website talk to this server. */
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+
+const MAX_BODY_BYTES = 1024 * 1024;
+
 function send(res, status, body, type = 'application/json') {
   const headers = { 'Content-Type': type, 'Cache-Control': 'no-store' };
   const origin = res.req?.headers.origin;
@@ -38,7 +43,14 @@ function send(res, status, body, type = 'application/json') {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (c) => (data += c));
+    req.on('data', (c) => {
+      data += c;
+      if (data.length > MAX_BODY_BYTES) {
+        reject(Object.assign(new Error('Body too large'), { status: 413 }));
+        req.destroy();
+      }
+    });
+    req.on('error', reject);
     req.on('end', () => {
       try {
         resolve(data ? JSON.parse(data) : {});
@@ -105,10 +117,17 @@ export function startServer(cfg, { port = cfg.server.port } = {}) {
 
   const server = http.createServer(async (req, res) => {
     res.req = req;
-    const url = new URL(req.url, 'http://x');
-    const pathname = decodeURIComponent(url.pathname);
 
     try {
+      if (!LOCAL_HOST.test(req.headers.host ?? '')) return send(res, 403, { error: 'Host not allowed' });
+      const url = new URL(req.url, 'http://x');
+      let pathname;
+      try {
+        pathname = decodeURIComponent(url.pathname);
+      } catch {
+        return send(res, 400, { error: 'Malformed URL' });
+      }
+
       // Preflight for the Storybook "Visual tests" panel (a different local port).
       if (req.method === 'OPTIONS') {
         const origin = req.headers.origin;
@@ -175,7 +194,7 @@ export function startServer(cfg, { port = cfg.server.port } = {}) {
 
       send(res, 405, { error: 'Method not allowed' });
     } catch (err) {
-      send(res, 500, { error: err.message });
+      send(res, err.status ?? 500, { error: err.message });
     }
   });
 

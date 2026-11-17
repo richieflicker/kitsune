@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { comparePngs } from '../compare.js';
 import { describeManifest, postStatusSafely } from '../github.js';
+import { reviewTransition } from '../review-rules.js';
 import { exceedsAllowance } from '../rules.js';
 import { summarize } from '../store.js';
 import { createFsStorage } from './storage.js';
@@ -414,11 +415,13 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       const now = new Date().toISOString();
       db.tx(() => {
         for (const r of targets) {
-          if (action === 'approve' && (r.status === 'changed' || r.status === 'rejected')) {
+          const next = reviewTransition(r.status, action);
+          if (!next) continue;
+          if (action === 'approve') {
             db.insertApproval({ projectId: project.id, branch: build.branch, key: r.key, imageHash: r.image_hash, approvedBy: reviewer, approvedAt: now, auto: false, buildId });
-            db.setStatus(buildId, r.key, 'accepted', `Approved by ${reviewer}`);
-          } else if (action === 'reject' && r.status === 'changed') {
-            db.setStatus(buildId, r.key, 'rejected', `Rejected by ${reviewer}`);
+            db.setStatus(buildId, r.key, next, `Approved by ${reviewer}`);
+          } else {
+            db.setStatus(buildId, r.key, next, `Rejected by ${reviewer}`);
           }
         }
       });

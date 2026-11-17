@@ -27,9 +27,16 @@ const MIME = {
 export function serveStatic(dir, { port = 0, fallbackIndex = false } = {}) {
   const root = path.resolve(dir);
   const server = http.createServer((req, res) => {
-    const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    let urlPath;
+    try {
+      urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    } catch {
+      res.writeHead(400).end('Bad request');
+      return;
+    }
     let file = path.join(root, urlPath);
-    if (!file.startsWith(root)) {
+    // Compare with a trailing separator so a sibling folder such as "<root>-old" does not pass.
+    if (file !== root && !file.startsWith(root + path.sep)) {
       res.writeHead(403).end('Forbidden');
       return;
     }

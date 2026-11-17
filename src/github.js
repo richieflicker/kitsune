@@ -40,7 +40,7 @@ export async function postStatus(ctx, { state, description }) {
       Accept: 'application/vnd.github+json',
       'Content-Type': 'application/json',
       'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'storybook-visual-review',
+      'User-Agent': 'kitsune-review',
     },
     body: JSON.stringify({
       state,

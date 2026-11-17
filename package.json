@@ -8,7 +8,8 @@
     "example:check": "node bin/kitsune.js -c examples/kitsune.config.js check",
     "example:serve": "node bin/kitsune.js -c examples/kitsune.config.js serve",
     "build:llms": "node scripts/build-llms.mjs",
-    "prepublishOnly": "npm run build:dashboard && npm run build:llms"
+    "prepublishOnly": "npm run build:dashboard && npm run build:llms",
+    "test": "node --test \"test/*.test.js\""
   },
   "license": "MIT",
   "type": "module",
