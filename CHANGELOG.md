@@ -14,6 +14,7 @@
 - Rejecting a story that was already approved is now refused, in both local and shared-server mode.
 - Local dashboard server: foreign `Host` headers are refused (DNS rebinding), request bodies are capped at 1 MB, and malformed URLs return 400 instead of crashing.
 - Static Storybook server: path traversal into sibling folders and malformed URLs are refused.
+- Branch builds and Create PR no longer fail with `spawn /bin/sh ENOENT` when the project path goes through a symlink (for example macOS `/var` → `/private/var`).
 
 ### Notes
 - Firefox and WebKit capture is implemented but has not been verified on a large Storybook.
