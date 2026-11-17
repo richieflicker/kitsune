@@ -39,7 +39,13 @@ export const defaults = {
   server: { port: 4455 }, // the local `kitsune serve` dashboard
   // Branches view in the dashboard. `allowed` limits which remote branches can be picked:
   // exact names or a trailing * ('release/*'). Empty = every remote branch.
-  branches: { allowed: [] },
+  // Building a branch's Storybook (Branches view -> Build & review): the branch is checked out into a
+  // temporary git worktree, so your own folder is never touched.
+  //   install: 'auto' links your node_modules when the lockfile is unchanged, otherwise runs the install for
+  //            your package manager; false skips it; a string is run as the install command.
+  //   buildCommand: null = `npm run build-storybook` if you have it, else `npx storybook build`. {out} is the output folder.
+  //   output: where the build is written, relative to the worktree (default '.kitsune-storybook').
+  branches: { allowed: [], install: 'auto', buildCommand: null, output: null },
 
   // ---- capture environment (same for every screenshot) ----
   colorScheme: 'light', // 'light' | 'dark' | 'no-preference' (prefers-color-scheme)

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Richie Flicker
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { compareBranches, fetchBranches, getBranches } from './api.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { compareBranches, fetchBranches, getBranchBuild, getBranches, startBranchBuild } from './api.js';
 import { readPref, writePref } from './ui.jsx';
 
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
@@ -21,7 +21,7 @@ export function ago(iso, now = Date.now()) {
  * Pick a local base branch and a remote branch, fetch, and see how they differ.
  * Fetching only updates remote-tracking refs: nothing is merged or checked out.
  */
-export default function Branches({ onBack }) {
+export default function Branches({ onBack, onReview }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [base, setBase] = useState('');
@@ -30,6 +30,8 @@ export default function Branches({ onBack }) {
   const [fetchedAt, setFetchedAt] = useState(null);
   const [cmp, setCmp] = useState(null);
   const [comparing, setComparing] = useState(false);
+  const [build, setBuild] = useState(null);
+  const watching = useRef(false); // true once this page started a build, so we only jump to the review for that one
 
   const apply = useCallback((listing) => {
     setData(listing);
@@ -68,6 +70,35 @@ export default function Branches({ onBack }) {
       stale = true;
     };
   }, [base, head, fetchedAt]);
+
+  // Pick up a build that is already running (or finished) when the page opens, and follow it while it runs.
+  useEffect(() => {
+    getBranchBuild().then(setBuild).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!build?.running) return undefined;
+    const timer = setInterval(() => getBranchBuild().then(setBuild).catch((err) => setError(err.message)), 1000);
+    return () => clearInterval(timer);
+  }, [build?.running]);
+
+  useEffect(() => {
+    if (build && !build.running && watching.current && build.compareId && !build.error) {
+      watching.current = false;
+      onReview(build.compareId);
+    }
+  }, [build, onReview]);
+
+  async function doBuild() {
+    setError(null);
+    try {
+      watching.current = true;
+      setBuild(await startBranchBuild(base, head));
+    } catch (err) {
+      watching.current = false;
+      setError(err.message);
+    }
+  }
 
   const remoteName = useMemo(() => data?.remote.find((b) => b.ref === head)?.remote ?? data?.remotes[0] ?? null, [data, head]);
 
@@ -159,6 +190,47 @@ export default function Branches({ onBack }) {
             <h2>Choose a remote branch</h2>
             <p className="muted">Fetch to see the latest branches, then pick one to compare against <strong>{base || 'your base'}</strong>.</p>
           </div>
+        )}
+
+        {head && (
+          <section className="br-card br-build">
+            <div>
+              <strong>Build and review screenshots</strong>
+              <p className="muted">Builds Storybook for <code>{base}</code> and <code>{head}</code> in temporary worktrees (your folder is untouched), then shows what changed visually.</p>
+            </div>
+            <button className="btn btn-primary" disabled={build?.running || !base || base === head} onClick={doBuild}>
+              {build?.running ? 'Building…' : 'Build & review'}
+            </button>
+          </section>
+        )}
+
+        {build?.running && (
+          <section className="br-card" aria-live="polite">
+            <strong>{build.phase}</strong>
+            {build.total > 0 && (
+              <div className="br-bar" role="progressbar" aria-valuemin={0} aria-valuemax={build.total} aria-valuenow={build.done}>
+                <div style={{ width: `${Math.round((build.done / build.total) * 100)}%` }} />
+              </div>
+            )}
+            <pre className="br-log">{build.log.slice(-6).join('\n')}</pre>
+          </section>
+        )}
+
+        {!build?.running && build?.error && (
+          <section className="br-card">
+            <strong className="status-error">The build failed</strong>
+            <pre className="br-log">{build.error}</pre>
+          </section>
+        )}
+
+        {!build?.running && build?.compareId && !build.error && (
+          <section className="br-card br-build">
+            <div>
+              <strong>Last build: {build.head} vs {build.base}</strong>
+              <p className="muted">Finished {ago(build.finishedAt)}.</p>
+            </div>
+            <button className="btn" onClick={() => onReview(build.compareId)}>Open review</button>
+          </section>
         )}
 
         {head && (

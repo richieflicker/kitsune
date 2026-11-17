@@ -25,6 +25,13 @@ export const localSource = { loadBuild: getBuild, act };
 // Branches view (local mode only)
 export const getBranches = () => request('/api/branches');
 export const fetchBranches = (remote) => act('branches/fetch', { remote });
+export const getBranchBuild = () => request('/api/branches/build');
+export const startBranchBuild = (base, head) => act('branches/build', { base, head });
+/** A review source for one branch comparison, shaped like localSource so the normal review screen can use it. */
+export const branchSource = (id) => ({
+  loadBuild: () => request(`/api/branch-review?id=${encodeURIComponent(id)}`),
+  act: (action, payload) => act(`branch-review/${action}`, { id, ...payload }),
+});
 export const compareBranches = (base, head) =>
   request(`/api/branches/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`);
 

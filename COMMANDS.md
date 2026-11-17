@@ -311,3 +311,4 @@ A misspelled or invalid setting stops the server from starting with a message th
 
 ### Branches view
 `kitsune serve` serves `GET /api/branches`, `POST /api/branches/fetch {remote}` and `GET /api/branches/compare?base=&head=` for the dashboard's Branches view. They run `git` in the folder where you started `kitsune serve`. Fetch runs `git fetch --prune <remote>` and nothing else; only refs git lists are accepted. Config: `branches.allowed` (exact names or a trailing `*`).
+`POST /api/branches/build {base, head}` starts a build (one at a time) and `GET /api/branches/build` reports progress. `GET /api/branch-review?id=` and `POST /api/branch-review/approve|reject` drive the review of a finished build; its images are under `/branch-images/<id>/`.

@@ -6,19 +6,30 @@ import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import Branches from './Branches.jsx';
 import RemoteApp from './RemoteApp.jsx';
-import { getMode, localSource } from './api.js';
+import { branchSource, getMode, localSource } from './api.js';
 import { UiContext, useTheme, withDefaults } from './ui.jsx';
 import './styles.css';
 
 /** Local mode: the review screen plus the Branches view, switched by the URL hash so a refresh keeps your place. */
 function LocalShell() {
-  const [view, setView] = useState(() => (location.hash === '#branches' ? 'branches' : 'review'));
-  const go = (next) => {
-    history.replaceState(null, '', next === 'branches' ? '#branches' : location.pathname + location.search);
-    setView(next);
+  // '#branches' = the Branches view, '#branches/review/<id>' = the review of one branch comparison.
+  const parse = () => {
+    const m = /^#branches\/review\/([0-9a-f_]+)$/.exec(location.hash);
+    if (m) return { name: 'branch-review', id: m[1] };
+    return { name: location.hash === '#branches' ? 'branches' : 'review' };
   };
+  const [view, setView] = useState(parse);
+  const go = (next, id) => {
+    const hash = next === 'branches' ? '#branches' : next === 'branch-review' ? `#branches/review/${id}` : '';
+    history.replaceState(null, '', location.pathname + location.search + hash);
+    setView({ name: next, id });
+  };
+  const source = useMemo(() => (view.name === 'branch-review' ? branchSource(view.id) : null), [view.name, view.id]);
 
-  if (view === 'branches') return <Branches onBack={() => go('review')} />;
+  if (view.name === 'branches') return <Branches onBack={() => go('review')} onReview={(id) => go('branch-review', id)} />;
+  if (view.name === 'branch-review') {
+    return <App key={view.id} source={source} headerExtra={<button className="btn" onClick={() => go('branches')}>← Branches</button>} />;
+  }
   return (
     <App
       source={localSource}

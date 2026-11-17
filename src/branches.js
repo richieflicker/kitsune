@@ -25,7 +25,7 @@ function explain(err, status = 500) {
 }
 
 /** Run git without ever prompting for credentials (a prompt would hang the dashboard). */
-async function git(args, { cwd, timeout = 30_000, status } = {}) {
+export async function git(args, { cwd, timeout = 30_000, status } = {}) {
   try {
     const { stdout } = await execFileAsync('git', args, {
       cwd,
@@ -131,3 +131,17 @@ export async function compareBranches(base, head, { cwd, allowed } = {}) {
       : [],
   };
 }
+
+/**
+ * The commit a listed branch points at (full sha). Only refs that listBranches offers are accepted,
+ * for the same reason compareBranches limits them.
+ */
+export async function resolveCommit(ref, { cwd, allowed } = {}) {
+  const listing = await listBranches({ cwd, allowed });
+  const known = new Set([...listing.local.map((b) => b.ref), ...listing.remote.map((b) => b.ref)]);
+  if (typeof ref !== 'string' || !known.has(ref)) throw httpError(400, `Unknown branch: ${ref}`);
+  return git(['rev-parse', '--verify', `${ref}^{commit}`], { cwd });
+}
+
+/** Top-level folder of the repository that contains `cwd`. */
+export const repoRoot = (cwd) => git(['rev-parse', '--show-toplevel'], { cwd });

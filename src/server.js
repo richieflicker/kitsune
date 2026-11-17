@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createBranchBuilder } from './branch-build.js';
 import { compareBranches, fetchRemote, listBranches } from './branches.js';
 import { review, runCheck } from './check.js';
 import { createStore } from './store.js';
@@ -74,9 +75,11 @@ function inside(root, rel) {
   return full === root || full.startsWith(root + path.sep) ? full : null;
 }
 
-export function startServer(cfg, { port = cfg.server.port, cwd = process.cwd() } = {}) {
+export function startServer(cfg, options = {}) {
+  const { port = cfg.server.port, cwd = cfg.baseDir ?? process.cwd() } = options;
   const gitOpts = { cwd, allowed: cfg.branches?.allowed };
   let fetching = false;
+  const branchBuilder = createBranchBuilder(cfg, { cwd, capture: options.capture });
   const store = createStore(cfg);
   const imageRoots = {
     new: store.paths.newDir,
@@ -186,6 +189,31 @@ export function startServer(cfg, { port = cfg.server.port, cwd = process.cwd() }
         }
       }
 
+      if (req.method === 'GET' && pathname === '/api/branches/build') return send(res, 200, branchBuilder.snapshot());
+
+      if (req.method === 'POST' && pathname === '/api/branches/build') {
+        const body = await readBody(req);
+        branchBuilder.start(body.base, body.head);
+        return send(res, 202, branchBuilder.snapshot());
+      }
+
+      if (req.method === 'GET' && pathname === '/api/branch-review') return send(res, 200, branchBuilder.manifest(url.searchParams.get('id')));
+
+      if (req.method === 'POST' && (pathname === '/api/branch-review/approve' || pathname === '/api/branch-review/reject')) {
+        const body = await readBody(req);
+        const keys = body.all ? 'all' : Array.isArray(body.keys) ? body.keys : body.key ? [body.key] : [];
+        if (keys !== 'all' && !keys.length) return send(res, 400, { error: 'Provide key, keys[] or all:true' });
+        return send(res, 200, branchBuilder.review(body.id, pathname.endsWith('approve') ? 'approve' : 'reject', keys));
+      }
+
+      if (req.method === 'GET' && pathname.startsWith('/branch-images/')) {
+        const [, , id, kind, ...rest] = pathname.split('/');
+        const roots = branchBuilder.imageRoots(id);
+        const root = Object.hasOwn(roots, kind) ? roots[kind] : null;
+        const file = root && inside(root, rest.join('/'));
+        return file ? sendFile(res, file) : send(res, 404, { error: 'Not found' });
+      }
+
       if (req.method === 'GET' && pathname === '/api/build') {
         const manifest = store.readManifest();
         return manifest ? send(res, 200, manifest) : send(res, 404, { error: 'No build yet. Run `kitsune check`.' });
@@ -201,7 +229,7 @@ export function startServer(cfg, { port = cfg.server.port, cwd = process.cwd() }
 
       if (req.method === 'GET' && pathname.startsWith('/images/')) {
         const [, , kind, ...rest] = pathname.split('/');
-        const root = imageRoots[kind];
+        const root = Object.hasOwn(imageRoots, kind) ? imageRoots[kind] : null;
         const file = root && inside(root, rest.join('/'));
         return file ? sendFile(res, file) : send(res, 404, { error: 'Not found' });
       }

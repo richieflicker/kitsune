@@ -69,7 +69,24 @@ reviewer's own choices are remembered in their browser.
 **remote branch**, press **Fetch** and see what the remote branch adds: commits, files changed and where it branched
 from. Fetch only downloads: it never merges, checks out or touches your files. Works with any git remote (Bitbucket
 included) using the credentials your git already has. Limit what can be picked with `branches: { allowed: ['main', 'release/*'] }`
-in the config. Building screenshots for the picked branch, approving and merging come in later steps.
+in the config.
+
+Then press **Build & review**. Kitsune checks the base branch and the remote branch out into temporary git
+worktrees (your own folder is never touched), builds Storybook in each, screenshots every story and opens the usual
+review screen: baseline = base branch, new = the remote branch. Approve or reject there as usual. Screenshots are
+cached per commit, so comparing the same commits again is instant.
+
+Set these in `branches` if the defaults don't fit:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `buildCommand` | `npm run build-storybook` if you have it, else `npx storybook build` | Command that builds Storybook. `{out}` is the output folder. |
+| `output` | `.kitsune-storybook` | Output folder, relative to the worktree. |
+| `install` | `'auto'` | `'auto'` reuses your `node_modules` when the lockfile is unchanged, otherwise runs `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile`. `false` skips it; a string is run as the install command. |
+| `allowed` | `[]` | Remote branches that can be picked (`'main'`, `'release/*'`). Empty = all. |
+
+Monorepos whose packages have their own `node_modules` should set `install` to a command that installs them.
+Merging or opening a pull request from the approved review is the next step and is not built yet.
 
 ## Config (`kitsune.config.js`)
 
