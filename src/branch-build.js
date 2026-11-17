@@ -275,7 +275,8 @@ export function createBranchBuilder(cfg, { cwd = process.cwd(), capture = captur
 
   async function run(base, head) {
     const root = await repoRoot(cwd);
-    const live = { root, cwd, sub: path.relative(root, cwd) };
+    const real = fs.realpathSync(cwd);
+    const live = { root, cwd: real, sub: path.relative(root, real) };
     const [baseSha, headSha] = await Promise.all([resolveCommit(base, { cwd, allowed }), resolveCommit(head, { cwd, allowed })]);
 
     const baseShots = await shotsFor(baseSha, `Base (${base})`, live);
