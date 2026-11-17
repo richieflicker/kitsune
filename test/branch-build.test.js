@@ -171,3 +171,61 @@ test('branch build: reuses your node_modules when the lockfile is unchanged, and
     failing.server.close();
   }
 });
+
+test('pr-link: only after everything is approved, only to listed branches, never the same branch', async () => {
+  // A real "remote" so origin/feature/blue exists; its address is then pointed at Bitbucket.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-prl-'));
+  const origin = path.join(root, 'origin.git');
+  git(root, 'init', '-q', '--bare', '-b', 'main', origin);
+  const cwd = project('ff0000');
+  git(cwd, 'remote', 'add', 'origin', origin);
+  git(cwd, 'push', '-q', 'origin', 'main');
+  git(cwd, 'checkout', '-q', '-b', 'feature/blue');
+  fs.writeFileSync(path.join(cwd, 'sb', 'color.txt'), '0000ff');
+  git(cwd, 'commit', '-qam', 'blue');
+  git(cwd, 'push', '-q', 'origin', 'feature/blue');
+  git(cwd, 'checkout', '-q', 'main');
+  git(cwd, 'remote', 'set-url', 'origin', 'https://secret-user@git.acme.com/scm/DS/ds.git');
+
+  const { url, server } = await startServer(config(), { port: 0, cwd, capture: fakeCapture([]) });
+  try {
+    await post(url, '/api/branches/build', { base: 'main', head: 'origin/feature/blue' });
+    const done = await waitDone(url);
+    assert.equal(done.error, null, done.error);
+
+    const ask = (target, id = done.compareId) => post(url, '/api/branches/pr-link', { id, target });
+    assert.equal((await ask('main')).status, 409); // button changed and is still waiting
+
+    await post(url, '/api/branch-review/approve', { id: done.compareId, all: true });
+    const ok = await (await ask('main')).json();
+    assert.equal(ok.provider, 'Bitbucket Server');
+    assert.equal(ok.source, 'feature/blue');
+    assert.equal(ok.target, 'main');
+    assert.equal(ok.url, 'https://git.acme.com/projects/DS/repos/ds/pull-requests?create&sourceBranch=refs%2Fheads%2Ffeature%2Fblue&targetBranch=refs%2Fheads%2Fmain');
+    assert.equal(ok.url.includes('secret-user'), false);
+
+    assert.equal((await ask('feature/blue')).status, 400); // same branch
+    assert.equal((await ask('nope')).status, 400); // not a listed branch
+    assert.equal((await ask('main', '../x')).status, 400); // bad id
+  } finally {
+    server.close();
+  }
+
+  // A review built from a local branch has no remote counterpart to open a pull request from.
+  const local = project();
+  git(local, 'checkout', '-q', '-b', 'feature/local');
+  fs.writeFileSync(path.join(local, 'sb', 'color.txt'), '00ff00');
+  git(local, 'commit', '-qam', 'green');
+  git(local, 'checkout', '-q', 'main');
+  const second = await startServer(config(), { port: 0, cwd: local, capture: fakeCapture([]) });
+  try {
+    await post(second.url, '/api/branches/build', { base: 'main', head: 'feature/local' });
+    const s = await waitDone(second.url);
+    await post(second.url, '/api/branch-review/approve', { id: s.compareId, all: true });
+    const res = await post(second.url, '/api/branches/pr-link', { id: s.compareId, target: 'main' });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /local branch/);
+  } finally {
+    second.server.close();
+  }
+});

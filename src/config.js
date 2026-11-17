@@ -45,7 +45,9 @@ export const defaults = {
   //            your package manager; false skips it; a string is run as the install command.
   //   buildCommand: null = `npm run build-storybook` if you have it, else `npx storybook build`. {out} is the output folder.
   //   output: where the build is written, relative to the worktree (default '.kitsune-storybook').
-  branches: { allowed: [], install: 'auto', buildCommand: null, output: null },
+  //   prUrl: address of your host's "new pull request" page for hosts Kitsune doesn't recognise (Bitbucket, GitHub
+  //          and GitLab are detected from the remote). {source} and {target} are replaced with the branch names.
+  branches: { allowed: [], install: 'auto', buildCommand: null, output: null, prUrl: null },
 
   // ---- capture environment (same for every screenshot) ----
   colorScheme: 'light', // 'light' | 'dark' | 'no-preference' (prefers-color-scheme)

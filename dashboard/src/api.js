@@ -32,6 +32,7 @@ export const branchSource = (id) => ({
   loadBuild: () => request(`/api/branch-review?id=${encodeURIComponent(id)}`),
   act: (action, payload) => act(`branch-review/${action}`, { id, ...payload }),
 });
+export const prLink = (id, target) => act('branches/pr-link', { id, target });
 export const compareBranches = (base, head) =>
   request(`/api/branches/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`);
 
