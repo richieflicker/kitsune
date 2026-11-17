@@ -70,6 +70,37 @@ images to spot a 1px shift, and **Highlight changes** to overlay the diff. Short
 Defaults (starting view, slider position, blink speed, theme...) are set in the `ui` section of the config, and each
 reviewer's own choices are remembered in their browser.
 
+### Branches view (no hook, no CI)
+
+`kitsune serve` also has a **⎇ Branches** button (or open `/#branches`). Pick your local **base branch**, pick a
+**remote branch**, press **Fetch** and see what the remote branch adds: commits, files changed and where it branched
+from. Fetch only downloads: it never merges, checks out or touches your files. Works with any git remote (Bitbucket
+included) using the credentials your git already has. Limit what can be picked with `branches: { allowed: ['main', 'release/*'] }`
+in the config.
+
+Then press **Build & review**. Kitsune checks the base branch and the remote branch out into temporary git
+worktrees (your own folder is never touched), builds Storybook in each, screenshots every story and opens the usual
+review screen: baseline = base branch, new = the remote branch. Approve or reject there as usual. Screenshots are
+cached per commit, so comparing the same commits again is instant.
+
+Set these in `branches` if the defaults don't fit:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `buildCommand` | `npm run build-storybook` if you have it, else `npx storybook build` | Command that builds Storybook. `{out}` is the output folder. |
+| `output` | `.kitsune-storybook` | Output folder, relative to the worktree. |
+| `install` | `'auto'` | `'auto'` reuses your `node_modules` when the lockfile is unchanged, otherwise runs `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile`. `false` skips it; a string is run as the install command. |
+| `prUrl` | `null` | Pull request page address for hosts Kitsune doesn't recognise. `{source}` and `{target}` are replaced. |
+| `allowed` | `[]` | Remote branches that can be picked (`'main'`, `'release/*'`). Empty = all. |
+
+Monorepos whose packages have their own `node_modules` should set `install` to a command that installs them.
+Once every change in the review is approved, **Create PR…** opens a dialog: choose the target branch and Kitsune opens your
+host's "new pull request" page with source and target already filled in (Bitbucket Cloud, Bitbucket Server / Data Center,
+GitHub and GitLab are recognised from the git remote; for anything else set `branches.prUrl`, e.g.
+`'https://git.example.com/org/repo/pulls/new?from={source}&to={target}'`). You press Create on that page, so no token is
+needed. The branch must exist on the remote; the PR is never opened while changes are unapproved.
+Merging from Kitsune is not built.
+
 ## Config (`kitsune.config.js`)
 
 The common options are below; the **full reference** (capture environment, masks, per-story `overrides`, comparison
@@ -278,7 +309,10 @@ server does it by itself. Pass the same folder options to
 `server start` and `server prune` (or set `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR`).
 
 **How baselines work.** Images are stored once by content hash. Each approval is an append-only record, so a
-branch's baseline is its newest approval, falling back to the default branch. Approving on a feature branch never
+branch's baseline is its newest approval, falling back to the default branch **as it was where the branch was cut**:
+`check --remote` sends the commits from the merge-base back, and the server uses the nearest one that has an approval,
+so later changes on the default branch do not show up as unrelated diffs. If that cannot be worked out (shallow clone,
+older client) it uses the newest default-branch approval. Approving on a feature branch never
 changes another branch. When a build on the default branch contains pixels already approved on another branch
 (the merge), they are accepted automatically instead of asking for a second review.
 
@@ -364,6 +398,7 @@ build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  
 | `kitsune approve [keys…]` | Approves changed stories; the new screenshot becomes the baseline. |
 | `kitsune reject <keys…>` | Marks changed stories as rejected. The check keeps failing for them. |
 | `kitsune status` | Shows the result of the last check without running it again. |
+| `kitsune init-hook [--warn] [--command <cmd>] [--force] [--remove]` | Installs a git **pre-push** hook that runs `kitsune check`. While changes are unapproved the push is blocked: review with `kitsune serve`, approve, push again. Uses `.husky/pre-push` when the project uses Husky, otherwise git's own hooks folder. Skip once with `KITSUNE_SKIP=1 git push` or `git push --no-verify`. `--warn` prints instead of blocking. A hook Kitsune did not write is never overwritten without `--force`. |
 
 ### `kitsune check`
 Build Storybook first (`npm run build-storybook`), because Kitsune reads the static build.
@@ -403,6 +438,9 @@ A *key* is `<story id>__<viewport>__<browser>`, as printed by `check`. The dashb
 
 ### `kitsune status`
 Prints the build and the summary counts from the last `check`.
+
+### `kitsune init-hook`
+For teams without CI access. The hook runs the full check on every push, so for big Storybooks consider `--warn` or `--command` with a faster check. Remove it with `kitsune init-hook --remove`.
 
 ---
 
@@ -447,6 +485,7 @@ npx kitsune server start --data ./kitsune-data
 
 # 2. in CI, after build-storybook
 KITSUNE_URL=https://review.example.com KITSUNE_UPLOAD_TOKEN=kitsune_up_… npx kitsune check --remote
+# (a branch is compared with the default branch as it was where the branch was cut; see --base-branch)
 
 # 3. reviewers open the server URL, sign in with the review token, approve or reject
 ```
@@ -620,6 +659,7 @@ A misspelled or invalid setting stops the server from starting with a message th
 |---|---|---|
 | `KITSUNE_BROWSER_PATH` | check | Use an installed Chrome instead of Playwright's Chromium. |
 | `KITSUNE_URL`, `KITSUNE_UPLOAD_TOKEN` | check `--remote` | Server address and upload token (CI secret). |
+| `KITSUNE_BASE_BRANCH` | check `--remote` | Default branch this branch was cut from (same as `--base-branch`; default: `main`, else `master`). Needs enough git history for `git merge-base` (in CI use `fetch-depth: 0`). |
 | `KITSUNE_REVIEW_URL` | check `--github` | Link on the GitHub status. |
 | `KITSUNE_DATA_DIR`, `KITSUNE_PORT`, `KITSUNE_HOST` | server | Data folder, port, interface. |
 | `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR` | server | Separate folders for files. |
@@ -638,3 +678,8 @@ A misspelled or invalid setting stops the server from starting with a message th
 | `Expected N snapshots but received M` (remote) | Upload was cut off. Run the check again. |
 | Server will not start | Needs Node 22.13+. Run `nvm use` in the project. |
 | Dashboard says "No build to review" | Run `kitsune check` first. |
+
+### Branches view
+`kitsune serve` serves `GET /api/branches`, `POST /api/branches/fetch {remote}` and `GET /api/branches/compare?base=&head=` for the dashboard's Branches view. They run `git` in the folder where you started `kitsune serve`. Fetch runs `git fetch --prune <remote>` and nothing else; only refs git lists are accepted. Config: `branches.allowed` (exact names or a trailing `*`).
+`POST /api/branches/build {base, head}` starts a build (one at a time) and `GET /api/branches/build` reports progress. `GET /api/branch-review?id=` and `POST /api/branch-review/approve|reject` drive the review of a finished build; its images are under `/branch-images/<id>/`.
+`POST /api/branches/pr-link {id, target}` returns the pull request page address for a finished review. It answers 409 until every change is approved, and only accepts a different, listed remote branch as the target.
