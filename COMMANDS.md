@@ -28,6 +28,7 @@ build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  
 | `kitsune approve [keys…]` | Approves changed stories; the new screenshot becomes the baseline. |
 | `kitsune reject <keys…>` | Marks changed stories as rejected. The check keeps failing for them. |
 | `kitsune status` | Shows the result of the last check without running it again. |
+| `kitsune init-hook [--warn] [--command <cmd>] [--force] [--remove]` | Installs a git **pre-push** hook that runs `kitsune check`. While changes are unapproved the push is blocked: review with `kitsune serve`, approve, push again. Uses `.husky/pre-push` when the project uses Husky, otherwise git's own hooks folder. Skip once with `KITSUNE_SKIP=1 git push` or `git push --no-verify`. `--warn` prints instead of blocking. A hook Kitsune did not write is never overwritten without `--force`. |
 
 ### `kitsune check`
 Build Storybook first (`npm run build-storybook`), because Kitsune reads the static build.
@@ -67,6 +68,9 @@ A *key* is `<story id>__<viewport>__<browser>`, as printed by `check`. The dashb
 
 ### `kitsune status`
 Prints the build and the summary counts from the last `check`.
+
+### `kitsune init-hook`
+For teams without CI access. The hook runs the full check on every push, so for big Storybooks consider `--warn` or `--command` with a faster check. Remove it with `kitsune init-hook --remove`.
 
 ---
 
