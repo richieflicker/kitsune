@@ -37,6 +37,9 @@ export const defaults = {
   browser: { executablePath: process.env.KITSUNE_BROWSER_PATH || undefined, channel: undefined, args: [] },
   dataDir: '.kitsune',
   server: { port: 4455 }, // the local `kitsune serve` dashboard
+  // Branches view in the dashboard. `allowed` limits which remote branches can be picked:
+  // exact names or a trailing * ('release/*'). Empty = every remote branch.
+  branches: { allowed: [] },
 
   // ---- capture environment (same for every screenshot) ----
   colorScheme: 'light', // 'light' | 'dark' | 'no-preference' (prefers-color-scheme)

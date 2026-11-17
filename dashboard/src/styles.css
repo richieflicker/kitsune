@@ -139,3 +139,29 @@ h2 { font-size: 16px; }
   .layout { grid-template-columns: 1fr; }
   .side { grid-template-columns: 1fr; }
 }
+
+/* Branches view */
+.br-main { display: grid; gap: 14px; align-content: start; max-width: 980px; width: 100%; margin: 0 auto; }
+.br-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.br-picker { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.br-field { display: grid; gap: 6px; flex: 1 1 220px; min-width: 0; }
+.br-label { font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.br-label small { font-weight: 400; }
+.br-field select { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; }
+.br-arrow { color: var(--muted); font-size: 18px; padding-bottom: 8px; }
+.br-fetch { padding: 9px 16px; }
+.br-note { margin: 0; }
+.br-empty { text-align: center; padding: 28px 18px; }
+.br-empty h2 { margin: 0 0 6px; }
+.br-stats { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.br-none { margin: 4px 0 0; }
+.br-commits { list-style: none; margin: 0; padding: 0; }
+.br-commits li { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.br-commits li:first-child { border-top: 0; }
+.br-commits code, .br-stats code { font-size: 12px; color: var(--muted); }
+.br-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 800px) {
+  .br-arrow { display: none; }
+  .br-commits li { grid-template-columns: 56px 1fr; }
+  .br-commits li .muted { grid-column: 2; }
+}

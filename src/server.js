@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compareBranches, fetchRemote, listBranches } from './branches.js';
 import { review, runCheck } from './check.js';
 import { createStore } from './store.js';
 
@@ -73,7 +74,9 @@ function inside(root, rel) {
   return full === root || full.startsWith(root + path.sep) ? full : null;
 }
 
-export function startServer(cfg, { port = cfg.server.port } = {}) {
+export function startServer(cfg, { port = cfg.server.port, cwd = process.cwd() } = {}) {
+  const gitOpts = { cwd, allowed: cfg.branches?.allowed };
+  let fetching = false;
   const store = createStore(cfg);
   const imageRoots = {
     new: store.paths.newDir,
@@ -161,6 +164,26 @@ export function startServer(cfg, { port = cfg.server.port } = {}) {
           return send(res, err.status ?? 500, { error: err.message });
         }
         return send(res, 202, run.snapshot());
+      }
+
+      if (req.method === 'GET' && pathname === '/api/branches') return send(res, 200, await listBranches(gitOpts));
+
+      if (req.method === 'GET' && pathname === '/api/branches/compare') {
+        const base = url.searchParams.get('base');
+        const head = url.searchParams.get('head');
+        if (!base || !head) return send(res, 400, { error: 'Provide base and head' });
+        return send(res, 200, await compareBranches(base, head, gitOpts));
+      }
+
+      if (req.method === 'POST' && pathname === '/api/branches/fetch') {
+        if (fetching) return send(res, 409, { error: 'A fetch is already running' });
+        const body = await readBody(req);
+        fetching = true;
+        try {
+          return send(res, 200, await fetchRemote(body.remote, gitOpts));
+        } finally {
+          fetching = false;
+        }
       }
 
       if (req.method === 'GET' && pathname === '/api/build') {

@@ -308,3 +308,6 @@ A misspelled or invalid setting stops the server from starting with a message th
 | `Expected N snapshots but received M` (remote) | Upload was cut off. Run the check again. |
 | Server will not start | Needs Node 22.13+. Run `nvm use` in the project. |
 | Dashboard says "No build to review" | Run `kitsune check` first. |
+
+### Branches view
+`kitsune serve` serves `GET /api/branches`, `POST /api/branches/fetch {remote}` and `GET /api/branches/compare?base=&head=` for the dashboard's Branches view. They run `git` in the folder where you started `kitsune serve`. Fetch runs `git fetch --prune <remote>` and nothing else; only refs git lists are accepted. Config: `branches.allowed` (exact names or a trailing `*`).
