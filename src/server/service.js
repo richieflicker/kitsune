@@ -246,9 +246,19 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       const maxDiffPixels = input.maxDiffPixels == null ? 0 : Number(input.maxDiffPixels);
       if (!Number.isInteger(maxDiffPixels) || maxDiffPixels < 0) throw new HttpError(400, 'maxDiffPixels must be a non-negative integer');
 
+      // Commits from where this branch was cut off the default branch, nearest first (optional; older clients omit it).
+      let ancestors = null;
+      if (input.ancestors != null) {
+        const list = input.ancestors;
+        if (!Array.isArray(list) || list.length > 500 || !list.every((c) => typeof c === 'string' && /^[0-9a-f]{7,40}$/i.test(c))) {
+          throw new HttpError(400, 'ancestors must be a list of at most 500 commit SHAs');
+        }
+        ancestors = list.map((c) => c.toLowerCase());
+      }
+
       const now = new Date();
       const id = `b_${now.toISOString().replace(/\D/g, '').slice(0, 14)}-${crypto.randomBytes(3).toString('hex')}`;
-      db.insertBuild({ id, projectId: project.id, branch, commit, browsers, expected, threshold, maxDiffPixels, createdAt: now.toISOString() });
+      db.insertBuild({ id, projectId: project.id, branch, commit, browsers, expected, threshold, maxDiffPixels, ancestors, createdAt: now.toISOString() });
       const build = db.buildById(id);
       await notify(project, build, 'pending', 'Capturing snapshots...');
       return { id, url: publicUrl ? `${publicUrl}/#/builds/${id}` : null };
@@ -329,7 +339,13 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
     _decide(project, build, snap) {
       const key = snap.key;
       const branchBaseline = db.latestApproval(project.id, key, build.branch);
-      const baseline = branchBaseline ?? (build.branch !== project.default_branch ? db.latestApproval(project.id, key, project.default_branch) : null);
+      // A branch compares against what its default-branch parent looked like where it was cut, so approvals that
+      // landed on the default branch afterwards do not show up as unrelated diffs. No fork info: newest approval.
+      let baseline = branchBaseline;
+      if (!baseline && build.branch !== project.default_branch) {
+        const ancestors = build.ancestors ? JSON.parse(build.ancestors) : null;
+        baseline = db.approvalNearestAncestor(project.id, key, project.default_branch, ancestors) ?? db.latestApproval(project.id, key, project.default_branch);
+      }
 
       if (!baseline) {
         return {
