@@ -7,6 +7,7 @@ import { Command } from 'commander';
 import { detectRun } from './ci.js';
 import { review, runCheck } from './check.js';
 import { loadConfig } from './config.js';
+import { installHook } from './hook.js';
 import { describeManifest, githubContext, postStatusSafely } from './github.js';
 import { runRemoteCheck } from './remote.js';
 import { startServer } from './server.js';
@@ -100,6 +101,25 @@ export async function main(argv) {
       }
       console.log('\nNext: npm run kitsune:browsers (only for Firefox/WebKit), build Storybook, then npm run kitsune:check.');
       console.log('For the Storybook tab, keep `npm run kitsune:serve` running next to Storybook.');
+    });
+
+  program
+    .command('init-hook')
+    .description('Install a git pre-push hook that runs `kitsune check` and blocks the push while changes are unapproved')
+    .option('--warn', 'print a warning but let the push through')
+    .option('--command <cmd>', 'command the hook runs (default: npx --no-install kitsune check)')
+    .option('--force', 'overwrite a pre-push hook that Kitsune did not write')
+    .option('--remove', 'remove the hook Kitsune installed')
+    .action((opts) => {
+      const r = installHook(process.cwd(), { warn: opts.warn, command: opts.command, force: opts.force, remove: opts.remove });
+      const where = r.file ? path.relative(process.cwd(), r.file) : '';
+      if (r.status === 'not-a-git-repo') throw new Error('This folder is not a git repository, so there is nowhere to install a hook.');
+      if (r.status === 'foreign') throw new Error(`${where} already exists and was not written by Kitsune. Re-run with --force to replace it.`);
+      if (r.status === 'absent') return console.log('No Kitsune pre-push hook to remove.');
+      if (r.status === 'removed') return console.log(`Removed ${where}`);
+      console.log(`${r.status === 'updated' ? 'Updated' : 'Installed'} ${where}${r.via === 'husky' ? ' (Husky)' : ''}`);
+      console.log(opts.warn ? 'Pushes will warn when changes need review.' : 'Pushes are blocked while changes need review: approve them with `kitsune serve`, then push again.');
+      console.log('Skip once with KITSUNE_SKIP=1 git push, or git push --no-verify.');
     });
 
   program
