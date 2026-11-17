@@ -322,6 +322,17 @@ export function createBranchBuilder(cfg, { cwd = process.cwd(), capture = captur
       return this.manifest(id);
     },
 
+    /** True only when nothing in this review still waits for a decision. */
+    isFullyApproved(id) {
+      const manifest = createStore({ dataDir: dirFor(id) }).readManifest();
+      return manifest.summary.pending === 0;
+    },
+
+    /** The branch this review was built from, as the picker listed it. */
+    headOf(id) {
+      return createStore({ dataDir: dirFor(id) }).readManifest().branch;
+    },
+
     imageRoots(id) {
       const { paths } = createStore({ dataDir: dirFor(id) });
       return { new: paths.newDir, diff: paths.diffDir, baselines: paths.baselines };

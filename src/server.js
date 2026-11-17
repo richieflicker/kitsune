@@ -6,7 +6,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBranchBuilder } from './branch-build.js';
-import { compareBranches, fetchRemote, listBranches } from './branches.js';
+import { compareBranches, fetchRemote, listBranches, remoteUrl } from './branches.js';
+import { pullRequestLink } from './pr-link.js';
 import { review, runCheck } from './check.js';
 import { createStore } from './store.js';
 
@@ -195,6 +196,20 @@ export function startServer(cfg, options = {}) {
         const body = await readBody(req);
         branchBuilder.start(body.base, body.head);
         return send(res, 202, branchBuilder.snapshot());
+      }
+
+      if (req.method === 'POST' && pathname === '/api/branches/pr-link') {
+        const body = await readBody(req);
+        // The gate: a pull request page is only offered once every change in the review is approved.
+        if (!branchBuilder.isFullyApproved(body.id)) return send(res, 409, { error: 'Approve all changes in the review first.' });
+        const listing = await listBranches(gitOpts);
+        const head = listing.remote.find((b) => b.ref === branchBuilder.headOf(body.id));
+        if (!head) return send(res, 400, { error: 'This review was built from a local branch. Push it to the remote first, then build from the remote branch.' });
+        const target = listing.remote.find((b) => b.remote === head.remote && b.name === body.target);
+        if (!target) return send(res, 400, { error: `Unknown target branch: ${body.target}` });
+        if (target.name === head.name) return send(res, 400, { error: 'The target must be a different branch.' });
+        const link = pullRequestLink(await remoteUrl(head.remote, gitOpts), head.name, target.name, { template: cfg.branches?.prUrl });
+        return send(res, 200, { ...link, source: head.name, target: target.name, remote: head.remote });
       }
 
       if (req.method === 'GET' && pathname === '/api/branch-review') return send(res, 200, branchBuilder.manifest(url.searchParams.get('id')));

@@ -145,3 +145,9 @@ export async function resolveCommit(ref, { cwd, allowed } = {}) {
 
 /** Top-level folder of the repository that contains `cwd`. */
 export const repoRoot = (cwd) => git(['rev-parse', '--show-toplevel'], { cwd });
+
+/** Address of a git remote (as configured, credentials stripped). */
+export async function remoteUrl(remote, { cwd } = {}) {
+  const url = await git(['remote', 'get-url', remote], { cwd });
+  return url.replace(/\/\/[^/@]*@/, '//');
+}

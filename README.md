@@ -83,10 +83,16 @@ Set these in `branches` if the defaults don't fit:
 | `buildCommand` | `npm run build-storybook` if you have it, else `npx storybook build` | Command that builds Storybook. `{out}` is the output folder. |
 | `output` | `.kitsune-storybook` | Output folder, relative to the worktree. |
 | `install` | `'auto'` | `'auto'` reuses your `node_modules` when the lockfile is unchanged, otherwise runs `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile`. `false` skips it; a string is run as the install command. |
+| `prUrl` | `null` | Pull request page address for hosts Kitsune doesn't recognise. `{source}` and `{target}` are replaced. |
 | `allowed` | `[]` | Remote branches that can be picked (`'main'`, `'release/*'`). Empty = all. |
 
 Monorepos whose packages have their own `node_modules` should set `install` to a command that installs them.
-Merging or opening a pull request from the approved review is the next step and is not built yet.
+Once every change in the review is approved, **Create PR…** opens a dialog: choose the target branch and Kitsune opens your
+host's "new pull request" page with source and target already filled in (Bitbucket Cloud, Bitbucket Server / Data Center,
+GitHub and GitLab are recognised from the git remote; for anything else set `branches.prUrl`, e.g.
+`'https://git.example.com/org/repo/pulls/new?from={source}&to={target}'`). You press Create on that page, so no token is
+needed. The branch must exist on the remote; the PR is never opened while changes are unapproved.
+Merging from Kitsune is not built.
 
 ## Config (`kitsune.config.js`)
 

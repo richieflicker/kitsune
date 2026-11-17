@@ -172,3 +172,15 @@ h2 { font-size: 16px; }
 .br-bar > div { height: 100%; background: var(--primary); transition: width 0.3s; }
 .br-log { margin: 10px 0 0; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--muted); white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow: auto; }
 @media (prefers-reduced-motion: reduce) { .br-bar > div { transition: none; } }
+
+/* Create PR dialog */
+.modal-backdrop { position: fixed; inset: 0; background: rgb(15 20 25 / 0.55); display: grid; place-items: center; padding: 16px; z-index: 50; }
+.modal { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px; width: min(560px, 100%); display: grid; gap: 14px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.35); }
+.modal h2 { margin: 0; font-size: 18px; }
+.modal .banner { margin: 0; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+a.btn { text-decoration: none; display: inline-block; }
+a.btn-primary { color: #fff; }
+.pr-flow { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.pr-branch { font-size: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-where { margin: 0; }
