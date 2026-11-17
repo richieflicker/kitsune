@@ -22,6 +22,12 @@ export const act = (action, payload) =>
 
 export const localSource = { loadBuild: getBuild, act };
 
+// Branches view (local mode only)
+export const getBranches = () => request('/api/branches');
+export const fetchBranches = (remote) => act('branches/fetch', { remote });
+export const compareBranches = (base, head) =>
+  request(`/api/branches/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`);
+
 // ---- remote mode: shared review server (cookie session; the header blocks cross-site form posts) ----
 const CSRF = { 'x-requested-with': 'kitsune' };
 const json = (method, body) => ({

@@ -63,6 +63,14 @@ images to spot a 1px shift, and **Highlight changes** to overlay the diff. Short
 Defaults (starting view, slider position, blink speed, theme...) are set in the `ui` section of the config, and each
 reviewer's own choices are remembered in their browser.
 
+### Branches view (no hook, no CI)
+
+`kitsune serve` also has a **⎇ Branches** button (or open `/#branches`). Pick your local **base branch**, pick a
+**remote branch**, press **Fetch** and see what the remote branch adds: commits, files changed and where it branched
+from. Fetch only downloads: it never merges, checks out or touches your files. Works with any git remote (Bitbucket
+included) using the credentials your git already has. Limit what can be picked with `branches: { allowed: ['main', 'release/*'] }`
+in the config. Building screenshots for the picked branch, approving and merging come in later steps.
+
 ## Config (`kitsune.config.js`)
 
 The common options are below; the **full reference** (capture environment, masks, per-story `overrides`, comparison
