@@ -271,7 +271,10 @@ server does it by itself. Pass the same folder options to
 `server start` and `server prune` (or set `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR`).
 
 **How baselines work.** Images are stored once by content hash. Each approval is an append-only record, so a
-branch's baseline is its newest approval, falling back to the default branch. Approving on a feature branch never
+branch's baseline is its newest approval, falling back to the default branch **as it was where the branch was cut**:
+`check --remote` sends the commits from the merge-base back, and the server uses the nearest one that has an approval,
+so later changes on the default branch do not show up as unrelated diffs. If that cannot be worked out (shallow clone,
+older client) it uses the newest default-branch approval. Approving on a feature branch never
 changes another branch. When a build on the default branch contains pixels already approved on another branch
 (the merge), they are accepted automatically instead of asking for a second review.
 

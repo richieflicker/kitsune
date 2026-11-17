@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Command } from 'commander';
-import { detectRun } from './ci.js';
+import { baseAncestors, detectRun } from './ci.js';
 import { review, runCheck } from './check.js';
 import { loadConfig } from './config.js';
 import { installHook } from './hook.js';
@@ -143,6 +143,7 @@ export async function main(argv) {
     .option('--remote', 'upload to the shared review server (KITSUNE_URL + KITSUNE_UPLOAD_TOKEN) instead of comparing locally')
     .option('--branch <name>', 'branch name for --remote (default: detected from CI/git)')
     .option('--commit <sha>', 'commit SHA for --remote (default: PR head / GITHUB_SHA / git)')
+    .option('--base-branch <name>', 'default branch this branch was cut from, for --remote (default: $KITSUNE_BASE_BRANCH, else main or master)')
     .action(async (opts) => {
       const cfg = await cfgOf();
 
@@ -154,7 +155,7 @@ export async function main(argv) {
         if (!token) throw new Error('--remote needs KITSUNE_UPLOAD_TOKEN in the environment (it is never read from the config file).');
 
         const run = detectRun(process.env, { branch: opts.branch, commit: opts.commit ?? opts.sha });
-        const { manifest, build } = await runRemoteCheck(cfg, { url, token, ...run, log: (m) => console.log(m), progress: terminalProgress });
+        const { manifest, build } = await runRemoteCheck(cfg, { url, token, ...run, ancestors: baseAncestors(opts.baseBranch || process.env.KITSUNE_BASE_BRANCH), log: (m) => console.log(m), progress: terminalProgress });
         printSummary(manifest);
         if (build.url) console.log(`\nReview: ${build.url}`);
         if (manifest.summary.pending > 0 && opts.fail) process.exitCode = 1;

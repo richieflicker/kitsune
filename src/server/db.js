@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS builds (
   expected INTEGER NOT NULL,
   threshold REAL NOT NULL,
   max_diff_pixels INTEGER NOT NULL,
+  ancestors TEXT,
   status TEXT NOT NULL DEFAULT 'uploading',
   failure TEXT,
   created_at TEXT NOT NULL,
@@ -117,6 +118,7 @@ export async function openDb(dataDir) {
   // Small forward-only migrations for databases created by an older version.
   const columns = db.prepare(`PRAGMA table_info(snapshots)`).all().map((c) => c.name);
   if (!columns.includes('rules')) db.exec(`ALTER TABLE snapshots ADD COLUMN rules TEXT`);
+  if (!db.prepare(`PRAGMA table_info(builds)`).all().some((c) => c.name === 'ancestors')) db.exec(`ALTER TABLE builds ADD COLUMN ancestors TEXT`);
   if (!db.prepare(`PRAGMA table_info(sessions)`).all().some((c) => c.name === 'reviewer_id')) db.exec(`ALTER TABLE sessions ADD COLUMN reviewer_id TEXT`);
 
   const p = (sql) => db.prepare(sql);
@@ -131,7 +133,7 @@ export async function openDb(dataDir) {
     setTokens: p(`UPDATE projects SET upload_token_hash = ?, review_token_hash = ? WHERE id = ?`),
     deleteProjectSessions: p(`DELETE FROM sessions WHERE project_id = ?`),
 
-    insertBuild: p(`INSERT INTO builds (id,project_id,branch,commit_sha,browsers,expected,threshold,max_diff_pixels,status,created_at) VALUES (?,?,?,?,?,?,?,?, 'uploading', ?)`),
+    insertBuild: p(`INSERT INTO builds (id,project_id,branch,commit_sha,browsers,expected,threshold,max_diff_pixels,ancestors,status,created_at) VALUES (?,?,?,?,?,?,?,?,?, 'uploading', ?)`),
     buildById: p(`SELECT * FROM builds WHERE id = ?`),
     claimFinalize: p(`UPDATE builds SET status = 'finalizing' WHERE id = ? AND status = 'uploading'`),
     setBuildStatus: p(`UPDATE builds SET status = ?, failure = ?, finalized_at = ? WHERE id = ?`),
@@ -206,7 +208,7 @@ export async function openDb(dataDir) {
       q.deleteProjectSessions.run(id); // old review sessions die with the old review token
     },
 
-    insertBuild: (b) => q.insertBuild.run(b.id, b.projectId, b.branch, b.commit, JSON.stringify(b.browsers), b.expected, b.threshold, b.maxDiffPixels, b.createdAt),
+    insertBuild: (b) => q.insertBuild.run(b.id, b.projectId, b.branch, b.commit, JSON.stringify(b.browsers), b.expected, b.threshold, b.maxDiffPixels, b.ancestors?.length ? JSON.stringify(b.ancestors) : null, b.createdAt),
     buildById: (id) => q.buildById.get(id),
     claimFinalize: (id) => q.claimFinalize.run(id).changes === 1,
     setBuildStatus: (id, status, failure, finalizedAt) => q.setBuildStatus.run(status, failure ?? null, finalizedAt ?? null, id),
@@ -227,6 +229,28 @@ export async function openDb(dataDir) {
     insertApproval: (a) => q.insertApproval.run(a.projectId, a.branch, a.key, a.imageHash, a.approvedBy, a.approvedAt, a.auto ? 1 : 0, a.buildId ?? null),
     latestApproval: (projectId, key, branch) => q.latestApproval.get(projectId, key, branch),
     approvalForHash: (projectId, key, hash) => q.approvalForHash.get(projectId, key, hash),
+    /**
+     * The approval on `branch` that was made at the commit nearest to where a feature branch was cut.
+     * `ancestors` lists commits newest first, starting at the merge-base. Newest approval wins within one commit.
+     */
+    approvalNearestAncestor: (projectId, key, branch, ancestors) => {
+      if (!ancestors?.length) return null;
+      const marks = ancestors.map(() => '?').join(',');
+      const rows = db
+        .prepare(`SELECT a.*, lower(b.commit_sha) AS commit_lc FROM approvals a JOIN builds b ON b.id = a.build_id
+          WHERE a.project_id = ? AND a.key = ? AND a.branch = ? AND lower(b.commit_sha) IN (${marks}) ORDER BY a.id DESC`)
+        .all(projectId, key, branch, ...ancestors);
+      let best = null;
+      let bestRank = Infinity;
+      for (const row of rows) {
+        const rank = ancestors.indexOf(row.commit_lc);
+        if (rank >= 0 && rank < bestRank) {
+          best = row;
+          bestRank = rank;
+        }
+      }
+      return best;
+    },
 
     // retention: what can be retired, and what must stay
     oldBuildIds: (cutoffIso) => q.oldBuilds.all(cutoffIso).map((r) => r.id),

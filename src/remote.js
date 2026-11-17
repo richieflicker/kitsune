@@ -53,7 +53,7 @@ async function pool(items, size, fn) {
  * Capture locally, upload every screenshot to the shared review server, and let the server compare
  * against the branch baselines. Returns { manifest, build }.
  */
-export async function runRemoteCheck(cfg, { url, token, branch, commit, log = () => {}, progress = () => {} }) {
+export async function runRemoteCheck(cfg, { url, token, branch, commit, ancestors, log = () => {}, progress = () => {} }) {
   const base = url.replace(/\/$/, '');
   const store = createStore(cfg);
   store.resetCurrent();
@@ -70,6 +70,7 @@ export async function runRemoteCheck(cfg, { url, token, branch, commit, log = ()
           json: {
             branch,
             commit,
+            ancestors: ancestors ?? undefined,
             browsers: cfg.browsers.map((b) => b.name),
             expected: total,
             threshold: cfg.threshold,

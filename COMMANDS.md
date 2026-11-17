@@ -115,6 +115,7 @@ npx kitsune server start --data ./kitsune-data
 
 # 2. in CI, after build-storybook
 KITSUNE_URL=https://review.example.com KITSUNE_UPLOAD_TOKEN=kitsune_up_… npx kitsune check --remote
+# (a branch is compared with the default branch as it was where the branch was cut; see --base-branch)
 
 # 3. reviewers open the server URL, sign in with the review token, approve or reject
 ```
@@ -288,6 +289,7 @@ A misspelled or invalid setting stops the server from starting with a message th
 |---|---|---|
 | `KITSUNE_BROWSER_PATH` | check | Use an installed Chrome instead of Playwright's Chromium. |
 | `KITSUNE_URL`, `KITSUNE_UPLOAD_TOKEN` | check `--remote` | Server address and upload token (CI secret). |
+| `KITSUNE_BASE_BRANCH` | check `--remote` | Default branch this branch was cut from (same as `--base-branch`; default: `main`, else `master`). Needs enough git history for `git merge-base` (in CI use `fetch-depth: 0`). |
 | `KITSUNE_REVIEW_URL` | check `--github` | Link on the GitHub status. |
 | `KITSUNE_DATA_DIR`, `KITSUNE_PORT`, `KITSUNE_HOST` | server | Data folder, port, interface. |
 | `KITSUNE_IMAGES_DIR`, `KITSUNE_DIFFS_DIR`, `KITSUNE_ARCHIVE_DIR` | server | Separate folders for files. |
