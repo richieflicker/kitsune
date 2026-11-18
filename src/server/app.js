@@ -205,6 +205,19 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
     send(res, 200, { builds: svc.listBuilds(project, { branch: url.searchParams.get('branch') || undefined, limit: url.searchParams.get('limit') }) });
   });
 
+  // ---- review requests (session) ----
+  route('GET', '/api/v1/requests', 'session', ({ res, project, session, url }) =>
+    send(res, 200, { requests: svc.listRequests(project, session, { limit: url.searchParams.get('limit') }) }));
+  route('POST', '/api/v1/requests', 'session', async ({ req, res, project, session }) => {
+    requireCsrfHeader(req);
+    send(res, 201, svc.createRequest(project, session, await readJson(req)));
+  });
+  route('GET', '/api/v1/requests/(?<id>[^/]+)', 'session', ({ res, project, session, params }) => send(res, 200, svc.getRequest(project, session, params.id)));
+  route('POST', '/api/v1/requests/(?<id>[^/]+)/(?<action>[A-Za-z]+)', 'session', async ({ req, res, project, session, params }) => {
+    requireCsrfHeader(req);
+    send(res, 200, svc.moveRequest(project, session, params.id, params.action, await readJson(req)));
+  });
+
   for (const action of ['approve', 'reject']) {
     route('POST', `/api/v1/builds/(?<id>[^/]+)/${action}`, 'session', async ({ req, res, project, session, params }) => {
       requireCsrfHeader(req);

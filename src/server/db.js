@@ -83,6 +83,34 @@ CREATE TABLE IF NOT EXISTS reviewers (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS reviewers_name ON reviewers(project_id, name) WHERE revoked_at IS NULL;
 
+-- A contributor's ask to have a branch reviewed. sha is the exact commit submitted, so a later push never changes
+-- what was reviewed. Every state change is also written to request_events (append-only).
+CREATE TABLE IF NOT EXISTS review_requests (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  requester TEXT NOT NULL,
+  source_branch TEXT NOT NULL,
+  target_branch TEXT NOT NULL,
+  sha TEXT NOT NULL,
+  title TEXT NOT NULL,
+  note TEXT,
+  state TEXT NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS review_requests_project ON review_requests(project_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS request_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id TEXT NOT NULL REFERENCES review_requests(id),
+  actor TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  detail TEXT,
+  at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS request_events_request ON request_events(request_id, id);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id_hash TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -184,6 +212,13 @@ export async function openDb(dataDir) {
     session: p(`SELECT * FROM sessions WHERE id_hash = ?`),
     deleteSession: p(`DELETE FROM sessions WHERE id_hash = ?`),
     purgeSessions: p(`DELETE FROM sessions WHERE expires_at < ?`),
+    insertRequest: p(`INSERT INTO review_requests (id,project_id,requester,source_branch,target_branch,sha,title,note,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`),
+    requestById: p(`SELECT * FROM review_requests WHERE id = ? AND project_id = ?`),
+    listRequests: p(`SELECT * FROM review_requests WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?`),
+    listRequestsBy: p(`SELECT * FROM review_requests WHERE project_id = ? AND requester = ? ORDER BY updated_at DESC LIMIT ?`),
+    updateRequest: p(`UPDATE review_requests SET state = ?, reason = ?, sha = ?, updated_at = ? WHERE id = ?`),
+    insertEvent: p(`INSERT INTO request_events (request_id,actor,kind,detail,at) VALUES (?,?,?,?,?)`),
+    eventsFor: p(`SELECT actor,kind,detail,at FROM request_events WHERE request_id = ? ORDER BY id`),
   };
 
   return {
@@ -279,5 +314,12 @@ export async function openDb(dataDir) {
     session: (idHash) => q.session.get(idHash),
     deleteSession: (idHash) => q.deleteSession.run(idHash),
     purgeSessions: (nowIso) => q.purgeSessions.run(nowIso),
+
+    insertRequest: (r) => q.insertRequest.run(r.id, r.projectId, r.requester, r.source, r.target, r.sha, r.title, r.note ?? null, r.state, r.at, r.at),
+    requestById: (projectId, id) => q.requestById.get(id, projectId),
+    listRequests: (projectId, { requester, limit }) => (requester ? q.listRequestsBy.all(projectId, requester, limit) : q.listRequests.all(projectId, limit)),
+    updateRequest: (id, { state, reason, sha, at }) => q.updateRequest.run(state, reason ?? null, sha, at, id),
+    addEvent: (e) => q.insertEvent.run(e.requestId, e.actor, e.kind, e.detail ?? null, e.at),
+    eventsFor: (requestId) => q.eventsFor.all(requestId),
   };
 }
