@@ -11,8 +11,8 @@ kitsune serve   →  review dashboard: side-by-side / slider / diff views, appro
 ```
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.mp4"><img src="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.gif" alt="Kitsune Review: a reviewer opens a request, compares before and after with a slider, and approves" width="860"></a>
-  <br><sub>A 25-second tour: open a request, compare with the slider, see the diff, approve. (<a href="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.mp4">sharper MP4</a>)</sub>
+  <a href="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.mp4"><img src="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.gif" alt="Kitsune Review: one request goes from a contributor, through the admin and a reviewer, to a read-only viewer" width="860"></a>
+  <br><sub>A 50-second tour of all four roles: a contributor sends a request, the admin builds it, a reviewer compares and approves, a viewer looks, the admin sees it done. (<a href="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.mp4">sharper MP4</a>)</sub>
 </p>
 
 **Why Kitsune?**
@@ -368,8 +368,12 @@ the **Users** page in the dashboard). What they see depends on their role:
 
 ![Contributor requests](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/contributor-requests.png)
 
+**Viewer.** Read-only builds; no approve or reject buttons.
+
+![Viewer](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/viewer.png)
+
 <details>
-<summary>More screens: sign-in, Users, Settings, viewer</summary>
+<summary>More screens: sign-in, Users, Settings</summary>
 
 **Sign-in**
 
@@ -382,10 +386,6 @@ the **Users** page in the dashboard). What they see depends on their role:
 **Admin: Settings.** Zoho Cliq alerts: webhook, which events, test message.
 
 ![Settings](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/admin-settings.png)
-
-**Viewer.** Read-only builds; no approve or reject buttons.
-
-![Viewer](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/viewer.png)
 
 </details>
 

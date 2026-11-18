@@ -365,8 +365,11 @@ the **Users** page in the dashboard). What they see depends on their role:
 **Contributor: my requests.** Send a branch for review, see where it stands, open the changes.
 
 
+**Viewer.** Read-only builds; no approve or reject buttons.
+
+
 <details>
-<summary>More screens: sign-in, Users, Settings, viewer</summary>
+<summary>More screens: sign-in, Users, Settings</summary>
 
 **Sign-in**
 
@@ -375,9 +378,6 @@ the **Users** page in the dashboard). What they see depends on their role:
 
 
 **Admin: Settings.** Zoho Cliq alerts: webhook, which events, test message.
-
-
-**Viewer.** Read-only builds; no approve or reject buttons.
 
 
 </details>
