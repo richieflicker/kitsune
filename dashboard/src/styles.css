@@ -275,3 +275,28 @@ a.btn-primary { color: #fff; }
 .login .hint-line { font-size: 12px; font-weight: 400; color: var(--muted); }
 .login-more { font-size: 13px; }
 .login-more summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
+
+/* Admin overview */
+.overview { max-width: 960px; padding: 20px 16px 40px; display: grid; gap: 22px; }
+.ov-head { display: flex; justify-content: space-between; align-items: center; }
+.ov-head h2, .overview h3 { margin: 0; }
+.overview h3 { font-size: 14px; margin-bottom: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ov-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.ov-card { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); text-decoration: none; }
+a.ov-card:hover { border-color: var(--text); }
+.ov-value { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.ov-label { font-size: 13px; font-weight: 600; }
+.ov-hint { font-size: 12px; color: var(--muted); }
+.ov-warn .ov-value { color: #b45309; }
+.ov-ok .ov-value { color: #047857; }
+.ov-flow { display: flex; gap: 0; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.ov-step { flex: 1 1 120px; display: grid; gap: 2px; padding: 12px 14px; color: var(--text); text-decoration: none; border-right: 1px solid var(--border); }
+.ov-step:last-child { border-right: 0; }
+.ov-step strong { font-size: 22px; }
+.ov-step span { font-size: 12px; color: var(--muted); }
+.ov-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.ov-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.ov-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ov-list li:last-child { border-bottom: 0; }
+.ov-list a { color: var(--text); text-decoration: none; }
+@media (max-width: 800px) { .ov-cols { grid-template-columns: 1fr; } }

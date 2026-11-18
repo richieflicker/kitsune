@@ -6,9 +6,10 @@ import App from './App.jsx';
 import Requests from './Requests.jsx';
 import Settings from './Settings.jsx';
 import Users from './Users.jsx';
+import Overview from './Overview.jsx';
 import { remote } from './api.js';
 
-const viewFromHash = () => (window.location.hash.startsWith('#/requests') ? 'requests' : window.location.hash.startsWith('#/settings') ? 'settings' : window.location.hash.startsWith('#/users') ? 'users' : 'builds');
+const viewFromHash = () => (window.location.hash.startsWith('#/requests') ? 'requests' : window.location.hash.startsWith('#/settings') ? 'settings' : window.location.hash.startsWith('#/users') ? 'users' : window.location.hash.startsWith('#/overview') ? 'overview' : 'builds');
 const buildIdFromHash = () => /^#\/builds\/([^/]+)/.exec(window.location.hash)?.[1] ?? null;
 
 function ago(iso) {
@@ -74,9 +75,10 @@ export default function RemoteApp() {
 
   const can = session.can ?? [];
   // With no section in the address, each role lands where its work is: viewers on builds, everyone else on requests.
-  const home = !session.readOnly && (can.includes('request') || can.includes('review')) ? 'requests' : 'builds';
+  const home = can.includes('manageUsers') ? 'overview' : !session.readOnly && (can.includes('request') || can.includes('review')) ? 'requests' : 'builds';
   const here = window.location.hash === '' || window.location.hash === '#' || window.location.hash === '#/' ? home : view;
   const tabs = [
+    { id: 'overview', label: 'Overview', hash: '#/overview', show: can.includes('manageUsers') },
     { id: 'builds', label: 'Builds', hash: '#/builds', show: true },
     { id: 'requests', label: 'Requests', hash: '#/requests', show: !session.readOnly },
     { id: 'users', label: 'Users', hash: '#/users', show: can.includes('manageUsers') },
@@ -127,6 +129,15 @@ export default function RemoteApp() {
       )}
     </div>
   );
+
+  if (here === 'overview' && can.includes('manageUsers')) {
+    return (
+      <div className="app">
+        <header className="topbar"><h1>🦊 Kitsune Review</h1>{header}</header>
+        <Overview session={session} />
+      </div>
+    );
+  }
 
   if (here === 'users' && can.includes('manageUsers')) {
     return (
