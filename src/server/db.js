@@ -119,6 +119,7 @@ export async function openDb(dataDir) {
   const columns = db.prepare(`PRAGMA table_info(snapshots)`).all().map((c) => c.name);
   if (!columns.includes('rules')) db.exec(`ALTER TABLE snapshots ADD COLUMN rules TEXT`);
   if (!db.prepare(`PRAGMA table_info(builds)`).all().some((c) => c.name === 'ancestors')) db.exec(`ALTER TABLE builds ADD COLUMN ancestors TEXT`);
+  if (!db.prepare(`PRAGMA table_info(reviewers)`).all().some((c) => c.name === 'role')) db.exec(`ALTER TABLE reviewers ADD COLUMN role TEXT NOT NULL DEFAULT 'reviewer'`);
   if (!db.prepare(`PRAGMA table_info(sessions)`).all().some((c) => c.name === 'reviewer_id')) db.exec(`ALTER TABLE sessions ADD COLUMN reviewer_id TEXT`);
 
   const p = (sql) => db.prepare(sql);
@@ -170,7 +171,9 @@ export async function openDb(dataDir) {
         SELECT MAX(id) FROM approvals WHERE project_id = a.project_id AND key = a.key AND branch = a.branch)`),
 
     insertSession: p(`INSERT INTO sessions (id_hash,project_id,name,created_at,expires_at,reviewer_id) VALUES (?,?,?,?,?,?)`),
-    insertReviewer: p(`INSERT INTO reviewers (id,project_id,name,token_hash,created_at) VALUES (?,?,?,?,?)`),
+    insertReviewer: p(`INSERT INTO reviewers (id,project_id,name,token_hash,created_at,role) VALUES (?,?,?,?,?,?)`),
+    setReviewerRole: p(`UPDATE reviewers SET role = ? WHERE id = ?`),
+    countAdmins: p(`SELECT COUNT(*) AS n FROM reviewers WHERE project_id = ? AND role = 'admin' AND revoked_at IS NULL`),
     reviewerByHash: p(`SELECT * FROM reviewers WHERE token_hash = ? AND revoked_at IS NULL`),
     reviewerById: p(`SELECT * FROM reviewers WHERE id = ?`),
     reviewerByName: p(`SELECT * FROM reviewers WHERE project_id = ? AND name = ? AND revoked_at IS NULL`),
@@ -258,7 +261,9 @@ export async function openDb(dataDir) {
     hashesInUse: (cutoffIso) => new Set(q.hashesInUse.all(cutoffIso, cutoffIso).map((r) => r.h)),
 
     insertSession: (s) => q.insertSession.run(s.idHash, s.projectId, s.name, s.createdAt, s.expiresAt, s.reviewerId ?? null),
-    insertReviewer: (r) => q.insertReviewer.run(r.id, r.projectId, r.name, r.tokenHash, r.createdAt),
+    insertReviewer: (r) => q.insertReviewer.run(r.id, r.projectId, r.name, r.tokenHash, r.createdAt, r.role ?? 'reviewer'),
+    setReviewerRole: (id, role) => q.setReviewerRole.run(role, id),
+    countAdmins: (projectId) => q.countAdmins.get(projectId).n,
     reviewerByHash: (h) => q.reviewerByHash.get(h),
     reviewerById: (id) => q.reviewerById.get(id),
     reviewerByName: (projectId, name) => q.reviewerByName.get(projectId, name),

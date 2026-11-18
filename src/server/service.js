@@ -9,6 +9,7 @@ import { describeManifest, postStatusSafely } from '../github.js';
 import { reviewTransition } from '../review-rules.js';
 import { exceedsAllowance } from '../rules.js';
 import { summarize } from '../store.js';
+import { DEFAULT_ROLE, ROLES } from './roles.js';
 import { createFsStorage } from './storage.js';
 
 export class HttpError extends Error {
@@ -167,14 +168,15 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
     },
 
     // ---------- per-person review tokens ----------
-    addReviewer(projectName, personName) {
+    addReviewer(projectName, personName, role = DEFAULT_ROLE) {
+      if (!ROLES.includes(role)) throw new HttpError(400, `Role must be one of: ${ROLES.join(', ')}`);
       const project = db.projectByName(projectName);
       if (!project) throw new HttpError(404, `No project named "${projectName}"`);
       const name = cleanText(personName, 60, 'Name');
       if (db.reviewerByName(project.id, name)) throw new HttpError(409, `"${name}" already has an active token. Revoke it first to issue a new one.`);
       const token = newToken('kitsune_rv');
-      db.insertReviewer({ id: `r_${crypto.randomBytes(6).toString('hex')}`, projectId: project.id, name, tokenHash: sha256(token), createdAt: new Date().toISOString() });
-      return { project, name, token };
+      db.insertReviewer({ id: `r_${crypto.randomBytes(6).toString('hex')}`, projectId: project.id, name, tokenHash: sha256(token), createdAt: new Date().toISOString(), role });
+      return { project, name, token, role };
     },
 
     listReviewers(projectName) {
@@ -188,8 +190,20 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       if (!project) throw new HttpError(404, `No project named "${projectName}"`);
       const row = db.reviewerByName(project.id, personName);
       if (!row) throw new HttpError(404, `No active token for "${personName}"`);
+      if (row.role === 'admin' && db.countAdmins(project.id) <= 1) throw new HttpError(409, 'That is the last admin. Make someone else an admin first.');
       db.revokeReviewer(row.id, new Date().toISOString());
       return { project, name: row.name };
+    },
+
+    setRole(projectName, personName, role) {
+      if (!ROLES.includes(role)) throw new HttpError(400, `Role must be one of: ${ROLES.join(', ')}`);
+      const project = db.projectByName(projectName);
+      if (!project) throw new HttpError(404, `No project named "${projectName}"`);
+      const row = db.reviewerByName(project.id, personName);
+      if (!row) throw new HttpError(404, `No active token for "${personName}"`);
+      if (row.role === 'admin' && role !== 'admin' && db.countAdmins(project.id) <= 1) throw new HttpError(409, 'That is the last admin. Make someone else an admin first.');
+      db.setReviewerRole(row.id, role);
+      return { project, name: row.name, role };
     },
 
     /** Turn the shared review token off so only personal tokens can sign in. */
@@ -219,16 +233,18 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
         expiresAt: new Date(now + sessionDays * 864e5).toISOString(),
         reviewerId: person?.id ?? null,
       });
-      return { sessionId, maxAgeSeconds: sessionDays * 86400, project, name };
+      return { sessionId, maxAgeSeconds: sessionDays * 86400, project, name, role: person?.role ?? DEFAULT_ROLE };
     },
 
     authSession(sessionId) {
       if (!sessionId) return null;
       const row = db.session(sha256(sessionId));
       if (!row || row.expires_at < new Date().toISOString()) return null;
-      if (row.reviewer_id && db.reviewerById(row.reviewer_id)?.revoked_at) return null;
+      // The role is read from the database on every request, so changing or revoking a role takes effect at once.
+      const person = row.reviewer_id ? db.reviewerById(row.reviewer_id) : null;
+      if (person?.revoked_at) return null;
       const project = db.projectById(row.project_id);
-      return project ? { project, name: row.name } : null;
+      return project ? { project, name: row.name, role: person?.role ?? DEFAULT_ROLE } : null;
     },
 
     logout: (sessionId) => sessionId && db.deleteSession(sha256(sessionId)),

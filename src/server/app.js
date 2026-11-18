@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb } from './db.js';
 import { createService, HttpError, KEY_RE } from './service.js';
 import { pruneStorage } from './prune.js';
+import { can, permissions } from './roles.js';
 import { createFsStorage } from './storage.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -162,7 +163,7 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
   });
 
   route('GET', '/api/v1/session', 'view', ({ res, project, session }) =>
-    send(res, 200, { project: project.name, name: session?.name ?? null, readOnly: !session }));
+    send(res, 200, { project: project.name, name: session?.name ?? null, readOnly: !session, role: session?.role ?? null, can: session ? permissions(session.role) : [] }));
 
   // ---- CI (upload token) ----
   route('POST', '/api/v1/builds', 'upload', async ({ req, res, project }) => {
@@ -207,6 +208,7 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
   for (const action of ['approve', 'reject']) {
     route('POST', `/api/v1/builds/(?<id>[^/]+)/${action}`, 'session', async ({ req, res, project, session, params }) => {
       requireCsrfHeader(req);
+      if (!can(session.role, 'review')) throw new HttpError(403, 'Your role cannot approve or reject changes');
       const body = await readJson(req);
       const keys = body.all ? 'all' : Array.isArray(body.keys) ? body.keys : body.key ? [body.key] : [];
       if (keys !== 'all' && !keys.length) throw new HttpError(400, 'Provide key, keys[] or all:true');

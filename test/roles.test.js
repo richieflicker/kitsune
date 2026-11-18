@@ -1,0 +1,90 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { openDb } from '../src/server/db.js';
+import { ACTIONS, can, permissions, ROLES } from '../src/server/roles.js';
+import { createService } from '../src/server/service.js';
+
+async function setup() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-roles-'));
+  const db = await openDb(dir);
+  const svc = createService({ db, dataDir: dir, env: {} });
+  svc.createProject({ name: 'p' });
+  return { svc };
+}
+
+test('permission table', () => {
+  assert.deepEqual(permissions('viewer'), ['view']);
+  assert.ok(can('contributor', 'request') && !can('contributor', 'review'));
+  assert.ok(can('reviewer', 'review') && !can('reviewer', 'build'));
+  for (const a of ACTIONS) assert.ok(can('admin', a), `admin can ${a}`);
+  assert.equal(can('nobody', 'view'), false); // unknown role
+  assert.equal(can('admin', 'launch-rockets'), false); // unknown action
+  assert.deepEqual(ROLES, ['viewer', 'contributor', 'reviewer', 'admin']);
+});
+
+test('personal tokens carry a role, default reviewer, and login reports it', async () => {
+  const { svc } = await setup();
+  assert.equal(svc.addReviewer('p', 'Asha').role, 'reviewer');
+  const dev = svc.addReviewer('p', 'Dev', 'contributor');
+  assert.equal(svc.login(dev.token).role, 'contributor');
+  assert.throws(() => svc.addReviewer('p', 'X', 'boss'), /Role must be one of/);
+});
+
+test('role changes apply to existing sessions immediately', async () => {
+  const { svc } = await setup();
+  svc.addReviewer('p', 'Root', 'admin');
+  const dev = svc.addReviewer('p', 'Dev', 'reviewer');
+  const { sessionId } = svc.login(dev.token);
+  assert.equal(svc.authSession(sessionId).role, 'reviewer');
+  svc.setRole('p', 'Dev', 'viewer');
+  assert.equal(svc.authSession(sessionId).role, 'viewer');
+  svc.revokeReviewer('p', 'Dev');
+  assert.equal(svc.authSession(sessionId), null);
+});
+
+test('the last admin cannot be revoked or demoted', async () => {
+  const { svc } = await setup();
+  svc.addReviewer('p', 'Root', 'admin');
+  assert.throws(() => svc.revokeReviewer('p', 'Root'), /last admin/);
+  assert.throws(() => svc.setRole('p', 'Root', 'viewer'), /last admin/);
+  svc.addReviewer('p', 'Second', 'admin');
+  svc.setRole('p', 'Root', 'viewer'); // fine now
+});
+
+import { startRemoteServer } from '../src/server/app.js';
+
+test('over HTTP: a viewer cannot approve, a reviewer passes the role check, session reports the role', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-roles-http-'));
+  const db = await openDb(dir);
+  const svc = createService({ db, dataDir: dir, env: {} });
+  svc.createProject({ name: 'p' });
+  const viewer = svc.addReviewer('p', 'Vi', 'viewer');
+  const reviewer = svc.addReviewer('p', 'Re', 'reviewer');
+  db.close?.();
+
+  const server = await startRemoteServer({ dataDir: dir, port: 0, env: {}, onRetention: () => {} });
+  try {
+    const base = server.url ?? `http://127.0.0.1:${server.port}`;
+    const hdr = { 'x-requested-with': 'kitsune', 'content-type': 'application/json' };
+    const signIn = async (token) => {
+      const r = await fetch(`${base}/api/v1/login`, { method: 'POST', headers: hdr, body: JSON.stringify({ token }) });
+      assert.equal(r.status, 200);
+      return r.headers.get('set-cookie').split(';')[0];
+    };
+    const approve = (cookie) => fetch(`${base}/api/v1/builds/b_nope/approve`, { method: 'POST', headers: { ...hdr, cookie }, body: JSON.stringify({ all: true }) });
+
+    const vCookie = await signIn(viewer.token);
+    assert.equal((await approve(vCookie)).status, 403);
+    const me = await (await fetch(`${base}/api/v1/session`, { headers: { cookie: vCookie } })).json();
+    assert.equal(me.role, 'viewer');
+    assert.deepEqual(me.can, ['view']);
+
+    const rCookie = await signIn(reviewer.token);
+    assert.notEqual((await approve(rCookie)).status, 403); // passes the role check, then "no such build"
+  } finally {
+    await server.close?.();
+  }
+});
