@@ -5,9 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import App from './App.jsx';
 import Requests from './Requests.jsx';
 import Settings from './Settings.jsx';
+import Users from './Users.jsx';
 import { remote } from './api.js';
 
-const viewFromHash = () => (window.location.hash.startsWith('#/requests') ? 'requests' : window.location.hash.startsWith('#/settings') ? 'settings' : 'builds');
+const viewFromHash = () => (window.location.hash.startsWith('#/requests') ? 'requests' : window.location.hash.startsWith('#/settings') ? 'settings' : window.location.hash.startsWith('#/users') ? 'users' : 'builds');
 const buildIdFromHash = () => /^#\/builds\/([^/]+)/.exec(window.location.hash)?.[1] ?? null;
 
 function ago(iso) {
@@ -75,6 +76,7 @@ export default function RemoteApp() {
   const tabs = [
     { id: 'builds', label: 'Builds', hash: '#/builds', show: true },
     { id: 'requests', label: 'Requests', hash: '#/requests', show: !session.readOnly },
+    { id: 'users', label: 'Users', hash: '#/users', show: can.includes('manageUsers') },
     { id: 'settings', label: 'Settings', hash: '#/settings', show: can.includes('manageUsers') },
   ].filter((t) => t.show);
 
@@ -122,6 +124,15 @@ export default function RemoteApp() {
       )}
     </div>
   );
+
+  if (view === 'users' && can.includes('manageUsers')) {
+    return (
+      <div className="app">
+        <header className="topbar"><h1>🦊 Kitsune Review</h1>{header}</header>
+        <Users me={session} />
+      </div>
+    );
+  }
 
   if (view === 'settings' && (session.can ?? []).includes('manageUsers')) {
     return (

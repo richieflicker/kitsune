@@ -223,6 +223,13 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       return db.listReviewers(project.id);
     },
 
+    /** People with an active token, without anything secret, for the dashboard Users page. */
+    listUsers(projectName) {
+      return this.listReviewers(projectName)
+        .filter((r) => !r.revoked_at)
+        .map((r) => ({ name: r.name, role: r.role, createdAt: r.created_at }));
+    },
+
     revokeReviewer(projectName, personName) {
       const project = db.projectByName(projectName);
       if (!project) throw new HttpError(404, `No project named "${projectName}"`);
