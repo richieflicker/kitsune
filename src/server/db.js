@@ -111,6 +111,15 @@ CREATE TABLE IF NOT EXISTS request_events (
 );
 CREATE INDEX IF NOT EXISTS request_events_request ON request_events(request_id, id);
 
+-- Small per-project settings an admin can change from the dashboard (for now: the Cliq alert webhook).
+CREATE TABLE IF NOT EXISTS project_settings (
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (project_id, key)
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id_hash TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -217,6 +226,9 @@ export async function openDb(dataDir) {
     listRequests: p(`SELECT * FROM review_requests WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?`),
     listRequestsBy: p(`SELECT * FROM review_requests WHERE project_id = ? AND requester = ? ORDER BY updated_at DESC LIMIT ?`),
     updateRequest: p(`UPDATE review_requests SET state = ?, reason = ?, sha = ?, updated_at = ? WHERE id = ?`),
+    getSetting: p(`SELECT value FROM project_settings WHERE project_id = ? AND key = ?`),
+    putSetting: p(`INSERT INTO project_settings (project_id,key,value,updated_at) VALUES (?,?,?,?) ON CONFLICT(project_id,key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`),
+    deleteSetting: p(`DELETE FROM project_settings WHERE project_id = ? AND key = ?`),
     insertEvent: p(`INSERT INTO request_events (request_id,actor,kind,detail,at) VALUES (?,?,?,?,?)`),
     eventsFor: p(`SELECT actor,kind,detail,at FROM request_events WHERE request_id = ? ORDER BY id`),
   };
@@ -319,6 +331,12 @@ export async function openDb(dataDir) {
     requestById: (projectId, id) => q.requestById.get(id, projectId),
     listRequests: (projectId, { requester, limit }) => (requester ? q.listRequestsBy.all(projectId, requester, limit) : q.listRequests.all(projectId, limit)),
     updateRequest: (id, { state, reason, sha, at }) => q.updateRequest.run(state, reason ?? null, sha, at, id),
+    getSetting: (projectId, key) => {
+      const row = q.getSetting.get(projectId, key);
+      return row ? JSON.parse(row.value) : null;
+    },
+    putSetting: (projectId, key, value) => q.putSetting.run(projectId, key, JSON.stringify(value), new Date().toISOString()),
+    deleteSetting: (projectId, key) => q.deleteSetting.run(projectId, key),
     addEvent: (e) => q.insertEvent.run(e.requestId, e.actor, e.kind, e.detail ?? null, e.at),
     eventsFor: (requestId) => q.eventsFor.all(requestId),
   };

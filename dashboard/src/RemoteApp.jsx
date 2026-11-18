@@ -4,9 +4,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import App from './App.jsx';
 import Requests from './Requests.jsx';
+import Settings from './Settings.jsx';
 import { remote } from './api.js';
 
-const onRequestsHash = () => window.location.hash === '#/requests';
+const viewFromHash = () => (window.location.hash === '#/requests' ? 'requests' : window.location.hash === '#/settings' ? 'settings' : 'builds');
 const buildIdFromHash = () => /^#\/builds\/([^/]+)/.exec(window.location.hash)?.[1] ?? null;
 
 function ago(iso) {
@@ -28,7 +29,7 @@ export default function RemoteApp() {
   const [selectedId, setSelectedId] = useState(buildIdFromHash());
   const [error, setError] = useState(null);
   const [signingIn, setSigningIn] = useState(false);
-  const [view, setView] = useState(onRequestsHash() ? 'requests' : 'builds');
+  const [view, setView] = useState(viewFromHash());
 
   useEffect(() => {
     remote.session().then(setSession).catch(() => setSession(null));
@@ -51,7 +52,7 @@ export default function RemoteApp() {
 
   useEffect(() => {
     const onHash = () => {
-      setView(onRequestsHash() ? 'requests' : 'builds');
+      setView(viewFromHash());
       setSelectedId(buildIdFromHash());
     };
     window.addEventListener('hashchange', onHash);
@@ -88,6 +89,11 @@ export default function RemoteApp() {
           {view === 'requests' ? 'Back to builds' : 'Requests'}
         </button>
       )}
+      {(session.can ?? []).includes('manageUsers') && (
+        <button className={`btn ${view === 'settings' ? 'btn-primary' : ''}`} onClick={() => { window.location.hash = view === 'settings' ? '' : '#/settings'; }}>
+          {view === 'settings' ? 'Back to builds' : 'Settings'}
+        </button>
+      )}
       <span className="muted">{session.project} · {session.readOnly ? 'view only' : `${session.name}${session.role ? ` (${session.role})` : ''}`}</span>
       {session.readOnly ? (
         <button className="btn btn-primary" onClick={() => setSigningIn(true)}>Sign in to review</button>
@@ -104,6 +110,15 @@ export default function RemoteApp() {
       )}
     </div>
   );
+
+  if (view === 'settings' && (session.can ?? []).includes('manageUsers')) {
+    return (
+      <div className="app">
+        <header className="topbar"><h1>🦊 Kitsune Review</h1>{header}</header>
+        <Settings />
+      </div>
+    );
+  }
 
   if (view === 'requests' && !session.readOnly) {
     return (

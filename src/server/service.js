@@ -9,6 +9,7 @@ import { describeManifest, postStatusSafely } from '../github.js';
 import { reviewTransition } from '../review-rules.js';
 import { exceedsAllowance } from '../rules.js';
 import { summarize } from '../store.js';
+import { checkWebhookUrl, cliqMessage, EVENTS as CLIQ_EVENTS, maskWebhookUrl, postToCliq } from './cliq.js';
 import { ACTIONS as REQUEST_ACTIONS, refusal } from './requests.js';
 import { can as roleCan, DEFAULT_ROLE, ROLES } from './roles.js';
 import { createFsStorage } from './storage.js';
@@ -73,7 +74,7 @@ const describeRequest = (r) => ({
   updatedAt: r.updated_at,
 });
 
-export function createService({ db, dataDir, storage = createFsStorage({ dataDir }), env = process.env, sessionDays = SESSION_DAYS }) {
+export function createService({ db, dataDir, storage = createFsStorage({ dataDir }), env = process.env, sessionDays = SESSION_DAYS, fetchImpl = fetch }) {
   const publicUrl = (env.KITSUNE_PUBLIC_URL || '').replace(/\/$/, '');
   const { imagePath, diffPath } = storage;
 
@@ -94,6 +95,28 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       },
       { state, description },
     );
+  }
+
+  // ---- Zoho Cliq alerts: the webhook comes from KITSUNE_CLIQ_WEBHOOK, or from the admin's settings page ----
+  const cliqConfig = (project) => {
+    const saved = db.getSetting(project.id, 'cliq') ?? {};
+    const url = env.KITSUNE_CLIQ_WEBHOOK || saved.url || null;
+    return { url, fromEnv: Boolean(env.KITSUNE_CLIQ_WEBHOOK), events: Array.isArray(saved.events) ? saved.events : CLIQ_EVENTS, last: saved.last ?? null };
+  };
+  const rememberCliq = (project, patch) => db.putSetting(project.id, 'cliq', { ...(db.getSetting(project.id, 'cliq') ?? {}), ...patch });
+
+  async function announce(project, event, request, actor) {
+    try {
+      const cfg = cliqConfig(project);
+      if (!cfg.url || !cfg.events.includes(event)) return;
+      const text = cliqMessage(event, request, actor, publicUrl ? `${publicUrl}/#/requests` : null);
+      if (!text) return;
+      const result = await postToCliq(cfg.url, text, fetchImpl);
+      rememberCliq(project, { last: { ...result, at: new Date().toISOString(), event } });
+      if (!result.ok) console.warn(`warning: Cliq alert (${event}) failed: ${result.error}`);
+    } catch (err) {
+      console.warn(`warning: Cliq alert (${event}) failed: ${err.message}`); // an alert must never break a review
+    }
   }
 
   function toManifest(project, build) {
@@ -286,7 +309,9 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       };
       db.insertRequest(request);
       db.addEvent({ requestId: request.id, actor: session.name, kind: 'submitted', detail: note, at });
-      return this.getRequest(project, session, request.id);
+      const made = this.getRequest(project, session, request.id);
+      void announce(project, 'submitted', made, session.name);
+      return made;
     },
 
     listRequests(project, session, { limit = 50 } = {}) {
@@ -318,7 +343,41 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       const at = new Date().toISOString();
       db.updateRequest(id, { state: rule.to, reason: rule.reason ? reason : null, sha, at });
       db.addEvent({ requestId: id, actor: session.name, kind: action, detail: reason ?? (action === 'resubmit' && sha !== row.sha ? `new commit ${sha.slice(0, 12)}` : null), at });
-      return this.getRequest(project, session, id);
+      const moved = this.getRequest(project, session, id);
+      if (CLIQ_EVENTS.includes(action)) void announce(project, action, moved, session.name);
+      return moved;
+    },
+
+    // ---------- settings (admin) ----------
+    getCliqSettings(project) {
+      const c = cliqConfig(project);
+      return { configured: Boolean(c.url), fromEnv: c.fromEnv, webhook: c.url ? maskWebhookUrl(c.url) : null, events: c.events, allEvents: CLIQ_EVENTS, last: c.last };
+    },
+
+    setCliqSettings(project, { url, events }) {
+      const patch = {};
+      if (url !== undefined) {
+        if (url === null || url === '') patch.url = null;
+        else {
+          const bad = checkWebhookUrl(url);
+          if (bad) throw new HttpError(400, bad);
+          patch.url = String(url);
+        }
+      }
+      if (events !== undefined) {
+        if (!Array.isArray(events) || !events.every((e) => CLIQ_EVENTS.includes(e))) throw new HttpError(400, `events must be a list from: ${CLIQ_EVENTS.join(', ')}`);
+        patch.events = [...new Set(events)];
+      }
+      rememberCliq(project, patch);
+      return this.getCliqSettings(project);
+    },
+
+    async testCliq(project, actor) {
+      const c = cliqConfig(project);
+      if (!c.url) throw new HttpError(409, 'No Cliq webhook is set yet');
+      const result = await postToCliq(c.url, `🦊 Kitsune Review: test message from ${actor}. Alerts are working.`, fetchImpl);
+      rememberCliq(project, { last: { ...result, at: new Date().toISOString(), event: 'test' } });
+      return { ...result, settings: this.getCliqSettings(project) };
     },
 
     // ---------- builds ----------

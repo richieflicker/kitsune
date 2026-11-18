@@ -218,6 +218,25 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
     send(res, 200, svc.moveRequest(project, session, params.id, params.action, await readJson(req)));
   });
 
+  // ---- settings (admins only) ----
+  const adminOnly = (session) => {
+    if (!can(session.role, 'manageUsers')) throw new HttpError(403, 'Only admins can change settings');
+  };
+  route('GET', '/api/v1/settings/cliq', 'session', ({ res, project, session }) => {
+    adminOnly(session);
+    send(res, 200, svc.getCliqSettings(project));
+  });
+  route('PUT', '/api/v1/settings/cliq', 'session', async ({ req, res, project, session }) => {
+    requireCsrfHeader(req);
+    adminOnly(session);
+    send(res, 200, svc.setCliqSettings(project, await readJson(req)));
+  });
+  route('POST', '/api/v1/settings/cliq/test', 'session', async ({ req, res, project, session }) => {
+    requireCsrfHeader(req);
+    adminOnly(session);
+    send(res, 200, await svc.testCliq(project, session.name));
+  });
+
   for (const action of ['approve', 'reject']) {
     route('POST', `/api/v1/builds/(?<id>[^/]+)/${action}`, 'session', async ({ req, res, project, session, params }) => {
       requireCsrfHeader(req);

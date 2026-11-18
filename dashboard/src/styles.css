@@ -210,3 +210,11 @@ a.btn-primary { color: #fff; }
 .req-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .req-events li { padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
 .req-empty { padding: 12px 4px; }
+
+/* settings */
+.settings { max-width: 640px; padding: 20px 16px; display: grid; gap: 12px; }
+.settings h3 { margin: 0; }
+.set-field { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+.set-field input { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+.set-events { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: grid; gap: 6px; font-size: 13px; }
+.set-events legend { font-weight: 600; padding: 0 6px; }
