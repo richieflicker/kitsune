@@ -222,6 +222,37 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
   const adminOnly = (session) => {
     if (!can(session.role, 'manageUsers')) throw new HttpError(403, 'Only admins can change settings');
   };
+  const usersOnly = (session) => {
+    if (!can(session.role, 'manageUsers')) throw new HttpError(403, 'Only admins can manage users');
+  };
+  route('GET', '/api/v1/users', 'session', ({ res, project, session }) => {
+    usersOnly(session);
+    send(res, 200, { users: svc.listUsers(project.name) });
+  });
+  // The token is in this one response only; it is stored hashed and cannot be shown again.
+  route('POST', '/api/v1/users', 'session', async ({ req, res, project, session }) => {
+    requireCsrfHeader(req);
+    usersOnly(session);
+    const body = await readJson(req);
+    const r = svc.addReviewer(project.name, body.name, body.role);
+    send(res, 201, { name: r.name, role: r.role, token: r.token });
+  });
+  route('PUT', '/api/v1/users/(?<name>[^/]+)/role', 'session', async ({ req, res, project, session, params }) => {
+    requireCsrfHeader(req);
+    usersOnly(session);
+    const body = await readJson(req);
+    const r = svc.setRole(project.name, decodeURIComponent(params.name), body.role);
+    send(res, 200, { name: r.name, role: r.role });
+  });
+  route('DELETE', '/api/v1/users/(?<name>[^/]+)', 'session', ({ req, res, project, session, params }) => {
+    requireCsrfHeader(req);
+    usersOnly(session);
+    const name = decodeURIComponent(params.name);
+    if (name === session.name) throw new HttpError(409, 'You cannot revoke your own token here');
+    svc.revokeReviewer(project.name, name);
+    send(res, 200, { name });
+  });
+
   route('GET', '/api/v1/settings/cliq', 'session', ({ res, project, session }) => {
     adminOnly(session);
     send(res, 200, svc.getCliqSettings(project));

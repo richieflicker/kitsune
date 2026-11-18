@@ -88,3 +88,46 @@ test('over HTTP: a viewer cannot approve, a reviewer passes the role check, sess
     await server.close?.();
   }
 });
+
+test('over HTTP: only admins manage users; token shown once; cannot lock out the last admin or yourself', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-users-http-'));
+  const db = await openDb(dir);
+  const svc = createService({ db, dataDir: dir, env: {} });
+  svc.createProject({ name: 'p' });
+  const admin = svc.addReviewer('p', 'Ad', 'admin');
+  const reviewer = svc.addReviewer('p', 'Re', 'reviewer');
+  db.close?.();
+
+  const server = await startRemoteServer({ dataDir: dir, port: 0, env: {}, onRetention: () => {} });
+  try {
+    const base = server.url ?? `http://127.0.0.1:${server.port}`;
+    const hdr = { 'x-requested-with': 'kitsune', 'content-type': 'application/json' };
+    const signIn = async (token) => {
+      const r = await fetch(`${base}/api/v1/login`, { method: 'POST', headers: hdr, body: JSON.stringify({ token }) });
+      return r.headers.get('set-cookie').split(';')[0];
+    };
+    const call = (cookie, method, url, body) => fetch(`${base}${url}`, { method, headers: { ...hdr, cookie }, body: body ? JSON.stringify(body) : undefined });
+
+    const rCookie = await signIn(reviewer.token);
+    assert.equal((await call(rCookie, 'GET', '/api/v1/users')).status, 403);
+    assert.equal((await call(rCookie, 'POST', '/api/v1/users', { name: 'X', role: 'viewer' })).status, 403);
+
+    const aCookie = await signIn(admin.token);
+    const added = await call(aCookie, 'POST', '/api/v1/users', { name: 'Priya', role: 'contributor' });
+    assert.equal(added.status, 201);
+    assert.match((await added.json()).token, /^kitsune_rv_/);
+
+    const list = await (await call(aCookie, 'GET', '/api/v1/users')).json();
+    assert.deepEqual(list.users.map((u) => u.name).sort(), ['Ad', 'Priya', 'Re']);
+    assert.ok(!JSON.stringify(list).includes('token'));
+
+    assert.equal((await call(aCookie, 'PUT', '/api/v1/users/Priya/role', { role: 'reviewer' })).status, 200);
+    assert.equal((await call(aCookie, 'PUT', '/api/v1/users/Ad/role', { role: 'viewer' })).status, 409); // last admin
+    assert.equal((await call(aCookie, 'DELETE', '/api/v1/users/Ad')).status, 409); // yourself
+    assert.equal((await call(aCookie, 'DELETE', '/api/v1/users/Priya')).status, 200);
+    const after = await (await call(aCookie, 'GET', '/api/v1/users')).json();
+    assert.ok(!after.users.some((u) => u.name === 'Priya'));
+  } finally {
+    await server.close?.();
+  }
+});

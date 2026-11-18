@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Users page for admins.** Add a person with a role (token shown once), change a role, or remove someone, from the dashboard instead of the CLI. New admin-only API: `GET/POST /api/v1/users`, `PUT /api/v1/users/:name/role`, `DELETE /api/v1/users/:name`.
+- **Impact badges and sort** in the review list; the top bar has role-aware tabs.
+
 ### Added
 - **Parallel branch builds**: start several Build & review runs and they queue, with up to `branches.concurrency` (default 2, max 4) running together. Each build has its own review, so you can open and approve a finished one while the others still build. Asking for a pair that is already queued or running returns that build, and two builds that need the same commit build it once. The Branches page now lists every build with its state.
 

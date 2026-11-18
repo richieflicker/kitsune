@@ -252,3 +252,15 @@ a.btn-primary { color: #fff; }
 .impact-minor { color: #0369a1; background: #0ea5e91a; border-color: #0ea5e955; }
 .impact-moderate { color: #b45309; background: #f59e0b1a; border-color: #f59e0b66; }
 .impact-major { color: #b91c1c; background: #ef44441a; border-color: #ef444466; }
+
+/* Users page */
+.users h2 { margin: 0 0 4px; }
+.user-add { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
+.user-add input { flex: 1 1 180px; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+.user-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+.user-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.user-table td { padding: 8px; border-bottom: 1px solid var(--border); }
+.token-box { display: grid; gap: 8px; padding: 12px; margin: 12px 0; border: 1px solid #f59e0b66; background: #f59e0b14; border-radius: 8px; }
+.token-box code { word-break: break-all; font-size: 13px; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.token-box .row { display: flex; gap: 8px; }
+.btn-danger { color: #b91c1c; }
