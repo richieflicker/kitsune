@@ -53,6 +53,7 @@ export const remote = {
   request: (id) => request(`/api/v1/requests/${id}`, { headers: CSRF }),
   submitRequest: (input) => request('/api/v1/requests', json('POST', input)),
   moveRequest: (id, action, payload) => request(`/api/v1/requests/${id}/${action}`, json('POST', payload)),
+  overview: () => request('/api/v1/overview', { headers: CSRF }),
   users: () => request('/api/v1/users', { headers: CSRF }),
   addUser: (name, role) => request('/api/v1/users', json('POST', { name, role })),
   setUserRole: (name, role) => request(`/api/v1/users/${encodeURIComponent(name)}/role`, json('PUT', { role })),

@@ -131,3 +131,21 @@ test('over HTTP: only admins manage users; token shown once; cannot lock out the
     await server.close?.();
   }
 });
+
+test('overview: admin-only numbers for the dashboard', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-overview-'));
+  const db = await openDb(dir);
+  const svc = createService({ db, dataDir: dir, env: {} });
+  const { project } = svc.createProject({ name: 'p' });
+  const admin = svc.addReviewer('p', 'Ad', 'admin');
+  const contributor = svc.addReviewer('p', 'Co', 'contributor');
+  svc.createRequest(project, { name: 'Co', role: 'contributor' }, { source: 'f/x', target: 'main', title: 'Thing', sha: 'a'.repeat(40) });
+  const o = svc.overview(project);
+  assert.equal(o.requests.total, 1);
+  assert.equal(o.requests.byState.open, 1);
+  assert.deepEqual(o.people.byRole, { admin: 1, contributor: 1 });
+  assert.equal(o.activity[0].title, 'Thing');
+  assert.equal(o.cliq.configured, false);
+  db.close?.();
+  void admin; void contributor;
+});

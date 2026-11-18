@@ -327,6 +327,28 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       return db.listRequests(project.id, { requester, limit: Math.min(Math.max(Number(limit) || 50, 1), 200) }).map(describeRequest);
     },
 
+    /** One page of numbers for admins: what is waiting, who is on the team, what just happened. */
+    overview(project) {
+      const requests = db.listRequests(project.id, { requester: null, limit: 500 });
+      const byState = {};
+      for (const r of requests) byState[r.state] = (byState[r.state] ?? 0) + 1;
+      const waiting = requests
+        .filter((r) => ['open', 'building', 'in_review', 'approved', 'pr_created'].includes(r.state))
+        .slice(0, 8)
+        .map(describeRequest);
+      const builds = this.listBuilds(project, { limit: 10 });
+      const users = this.listUsers(project.name);
+      const byRole = {};
+      for (const u of users) byRole[u.role] = (byRole[u.role] ?? 0) + 1;
+      return {
+        requests: { total: requests.length, byState, waiting },
+        builds: { recent: builds, toReview: builds.filter((b) => b.status === 'ready' && b.pending > 0).length },
+        people: { total: users.length, byRole },
+        cliq: { configured: this.getCliqSettings(project).configured },
+        activity: db.recentEvents(project.id, 12),
+      };
+    },
+
     getRequest(project, session, id) {
       const row = db.requestById(project.id, id);
       if (!row || (session.role === 'contributor' && row.requester !== session.name)) throw new HttpError(404, 'No such request');

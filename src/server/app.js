@@ -225,6 +225,10 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
   const usersOnly = (session) => {
     if (!can(session.role, 'manageUsers')) throw new HttpError(403, 'Only admins can manage users');
   };
+  route('GET', '/api/v1/overview', 'session', ({ res, project, session }) => {
+    usersOnly(session);
+    send(res, 200, svc.overview(project));
+  });
   route('GET', '/api/v1/users', 'session', ({ res, project, session }) => {
     usersOnly(session);
     send(res, 200, { users: svc.listUsers(project.name) });

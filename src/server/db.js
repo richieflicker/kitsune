@@ -231,6 +231,7 @@ export async function openDb(dataDir) {
     deleteSetting: p(`DELETE FROM project_settings WHERE project_id = ? AND key = ?`),
     insertEvent: p(`INSERT INTO request_events (request_id,actor,kind,detail,at) VALUES (?,?,?,?,?)`),
     eventsFor: p(`SELECT actor,kind,detail,at FROM request_events WHERE request_id = ? ORDER BY id`),
+    recentEvents: p(`SELECT e.actor, e.kind, e.detail, e.at, e.request_id AS requestId, r.title FROM request_events e JOIN review_requests r ON r.id = e.request_id WHERE r.project_id = ? ORDER BY e.id DESC LIMIT ?`),
   };
 
   return {
@@ -339,5 +340,6 @@ export async function openDb(dataDir) {
     deleteSetting: (projectId, key) => q.deleteSetting.run(projectId, key),
     addEvent: (e) => q.insertEvent.run(e.requestId, e.actor, e.kind, e.detail ?? null, e.at),
     eventsFor: (requestId) => q.eventsFor.all(requestId),
+    recentEvents: (projectId, limit) => q.recentEvents.all(projectId, limit),
   };
 }
