@@ -328,8 +328,40 @@ changes another branch. When a build on the default branch contains pixels alrea
 Put Nginx or Caddy in front for TLS. The review cookie is HttpOnly and SameSite=Strict; the dashboard's write calls also
 require an `X-Requested-With` header. Login is limited to 10 failures per 15 minutes per IP.
 
+### Teams, roles and review requests
+
+Each person gets a personal token and one of four roles (`kitsune server add-user <project> "Name" --role <role>`, or
+the **Users** page in the dashboard):
+
+| Role | Can |
+|---|---|
+| `viewer` | look at builds |
+| `contributor` | look, and send review requests; sees only their own requests |
+| `reviewer` | also approve, reject or ask for changes |
+| `admin` | everything, including Users and Settings |
+
+A contributor sends a **review request** (branch, exact commit, title). It moves `open` → `building` → `in_review` →
+`approved` → `pr_created` → `published`, or is `rejected` / sent back for `changes_requested` (a reason is required;
+only the requester resubmits). Every step is checked against the person's role and kept in an append-only history.
+Builds happen on an admin's own machine for now: build the branch, upload it, then mark the request built. Contributors
+see where their request stands and can open its build read-only.
+
+**Pages.** After sign-in admins land on **Overview** (what needs action, who is on the team, recent activity),
+reviewers and contributors on **Requests**, viewers on **Builds**. Admins also get **Users** and **Settings**.
+
+**Impact.** Every changed story gets a Minor / Moderate / Major level, shown as a badge in the review list (sort by
+biggest change first) and in the Storybook **Visual changes** panel. Tune it with the `impact` key (see COMMANDS).
+
+**Zoho Cliq alerts.** Admins paste a Cliq incoming-webhook address under **Settings** and choose which events post
+(submitted, ready to review, approved, changes requested, rejected, resubmitted, PR created, published).
+
+**Publishing.** `kitsune publish` rehearses a publish to Verdaccio (or npm) and, with `--yes`, really publishes. It
+refuses a dirty tree, a version the registry already has, or a missing login; with `--request <id> --server <url>` it
+only publishes an approved request on the approved commit.
+
 **Limits of this version.**
-- One shared review token per project, no user accounts or SSO. The name typed at sign-in is recorded with approvals but is not verified.
+- Personal tokens and roles, but no SSO. A shared review token (if you keep it) records the name typed at sign-in without verifying it.
+- Builds for review requests run on an admin's machine, not on the server; Bitbucket has no commit-status integration yet (GitHub only).
 - No "un-approve". A wrong approval is fixed by approving the right pixels again.
 - A stale approval on an old branch can win over a later change on the default branch for that branch only.
 - SQLite plus local disk means a single server. The storage code is isolated (`src/server/db.js` holds all SQL, image reads and writes go through one service) so Postgres/Mongo, S3, or a NestJS wrapper can be swapped in later.
@@ -393,6 +425,7 @@ build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  
 |---|---|
 | `kitsune init [--no-scripts] [--no-storybook]` | Creates a starter `kitsune.config.js`, adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to `package.json` (existing scripts are never overwritten) and adds the `kitsune-review` addon to `.storybook/main.*` when it is a plain `addons: [ ... ]` array (otherwise it prints the line). Safe to run again. |
 | `kitsune browsers [names...]` | Installs Playwright browsers using the Playwright that Kitsune itself uses. Default: `firefox webkit`. |
+| `kitsune publish [--registry <url>] [--tag next] [--yes] [--request <id> --server <url>]` | Publishes this package to Verdaccio (or npm). **Rehearses by default** (`npm publish --dry-run`); add `--yes` to really publish. Refuses unless the tree is clean, the version is free on the registry and you are signed in (`npm adduser --registry <url>`, or put your token in `KITSUNE_PUBLISH_TOKEN`; it is written to a temporary file that is deleted afterwards). With `--request`, it also checks the request is approved, that you are on the approved commit, and marks it published (needs `KITSUNE_REVIEW_TOKEN`, an admin's personal token). |
 | `kitsune check` | Captures every story, compares with baselines, prints a summary. **Exits with code 1 if anything needs review**, which is what makes CI fail. |
 | `kitsune serve` | Opens the review dashboard (default http://127.0.0.1:4455): before/after, slider, diff, approve/reject. |
 | `kitsune approve [keys…]` | Approves changed stories; the new screenshot becomes the baseline. |
@@ -467,8 +500,9 @@ Everything is stored in one folder: a SQLite database (projects, reviewers, sess
 | `kitsune server create-project <name>` | Creates a project and prints an **upload token** (for CI) and a **review token** (for reviewers). Shown once. |
 | `kitsune server start` | Starts the dashboard + API (default http://127.0.0.1:4456). |
 | `kitsune user add <name>` / `user list` / `user revoke <name>` | Short form of the three commands below. The project is optional when there is only one (`--project <name>` otherwise); the data folder defaults to `./kitsune-data`. |
-| `kitsune server add-reviewer <project> <name>` | Issues a **personal review token** (shown once). Approvals are recorded under that name, and typing another name does nothing. |
-| `kitsune server list-reviewers <project>` | Shows who has a personal token (active or revoked). |
+| `kitsune server add-reviewer <project> <name> [--role <role>]` (alias `add-user`) | Issues a **personal token** (shown once). Approvals are recorded under that name, and typing another name does nothing. Roles: `viewer` (look only), `contributor` (look and submit requests), `reviewer` (approve / reject, the default) and `admin` (everything). |
+| `kitsune server set-role <project> <name> <role>` | Changes a person's role. Applies on their next request. The last admin cannot be demoted or revoked. |
+| `kitsune server list-reviewers <project>` (alias `list-users`) | Shows who has a personal token (active or revoked) and their role. |
 | `kitsune server revoke-reviewer <project> <name>` | Revokes one person's token and signs only them out. |
 | `kitsune server disable-shared-token <project>` | Turns the shared review token off so only personal tokens can sign in. |
 | `kitsune server rotate-tokens <name>` | Issues new tokens. Old ones stop working and review sessions are signed out. |
@@ -616,6 +650,23 @@ ui: {
 ```
 With the shared server, set `ui` in the server settings file instead (below).
 
+### Impact scoring (`impact`)
+
+Every compared story gets an impact level: `none`, `minor`, `moderate` or `major` (a page that changed size is always
+`major`). Defaults, all optional in `kitsune.config.js`:
+
+```js
+impact: {
+  minor: 0.005,        // share of changed pixels where a change counts as moderate and up
+  major: 0.05,         // share of changed pixels above which it is major
+  bboxMajor: 0.4,      // share of the page the changes span above which it is major
+  regionsModerate: 4,  // separate changed areas that make it moderate
+  regionsMajor: 12,    // separate changed areas that make it major
+}
+```
+The shared server uses these defaults for every project. The local server returns the level for one story at
+`GET /api/impact?story=<id>` (used by the Storybook "Visual changes" panel).
+
 ## Server settings file (`kitsune.server.json`)
 
 Put it in the folder you start the server from (or pass `--server-config <file>`). Secrets are never read from it:
@@ -666,8 +717,23 @@ A misspelled or invalid setting stops the server from starting with a message th
 | `KITSUNE_PUBLIC_URL` | server | Public address (see `publicUrl`). |
 | `KITSUNE_GITHUB_TOKEN` | server | Token allowed to write commit statuses (never in a file). |
 | `KITSUNE_GITHUB_API_URL` | server | GitHub API address. |
+| `KITSUNE_CLIQ_WEBHOOK` | server | Zoho Cliq incoming-webhook address for request alerts (admins can also set it under Settings; the setting wins). https Zoho hosts only. |
+| `KITSUNE_PUBLISH_TOKEN` | publish | Registry token for `kitsune publish`; written to a temporary file that is deleted afterwards, never stored. |
+| `KITSUNE_REVIEW_TOKEN` | publish `--request` | An admin's personal token, so publish can check and close a review request. |
 | `KITSUNE_TRUST_PROXY=1` | server | Read client IP from `X-Forwarded-For` (only behind your own reverse proxy). |
 | `KITSUNE_TAB=1` | Storybook | Show the Kitsune tab inside Storybook (when your `main.js` opts in). |
+
+## Dashboard pages and API (shared server)
+
+| Page | Who sees it | What it does |
+|---|---|---|
+| Overview | admin (their home page) | Requests needing action, builds with changes waiting, people by role, Cliq on/off, pipeline, activity. `GET /api/v1/overview`. |
+| Builds | everyone | Review a build: impact badge per story, sort by biggest change, approve / reject (reviewer and admin only). |
+| Requests | contributor, reviewer, admin | Contributors submit and track; reviewers and admins work the queue. A request shows "See the changes" for the build of its commit. |
+| Users | admin | Add a person with a role (token shown once), change role, remove. `GET/POST /api/v1/users`, `PUT /api/v1/users/:name/role`, `DELETE /api/v1/users/:name`. |
+| Settings | admin | Zoho Cliq alerts: webhook address, which events, test message. `GET/PUT /api/v1/settings/cliq`, `POST /api/v1/settings/cliq/test`. |
+
+With no page in the address, viewers open on Builds, contributors and reviewers on Requests, admins on Overview.
 
 ## Troubleshooting
 
