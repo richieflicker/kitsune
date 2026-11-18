@@ -123,6 +123,56 @@ export async function main(argv) {
     });
 
   program
+    .command('publish')
+    .description('Publish this package to Verdaccio (or npm) after checking it is the approved commit. Rehearses only unless you pass --yes')
+    .option('--registry <url>', 'registry address (default: publishConfig.registry from package.json)')
+    .option('--tag <tag>', 'dist-tag to publish under', 'next')
+    .option('--access <access>', 'public | restricted (scoped packages)')
+    .option('--yes', 'really publish (without it, npm --dry-run runs and nothing is uploaded)')
+    .option('--allow-dirty', 'publish even with uncommitted changes')
+    .option('--request <id>', 'a review request on the shared server: it must be approved, and the commit must match')
+    .option('--server <url>', 'the shared review server (needed with --request)')
+    .action(async (opts) => {
+      const { publishPackage, PublishError } = await import('./publish.js');
+      let expectedSha;
+      let session = null;
+      try {
+        if (opts.request) {
+          if (!opts.server) throw new PublishError('Give the shared server address: --server <url>');
+          const { openRemote } = await import('./publish-remote.js');
+          session = await openRemote(opts.server, process.env.KITSUNE_REVIEW_TOKEN);
+          const req = await session.getRequest(opts.request);
+          if (!['approved', 'pr_created'].includes(req.state)) throw new PublishError(`Request "${req.title}" is "${req.state}". Only approved requests can be published.`);
+          expectedSha = req.sha;
+          console.log(`Request "${req.title}" by ${req.requester} is ${req.state}`);
+        }
+        const result = await publishPackage({
+          registry: opts.registry,
+          tag: opts.tag,
+          access: opts.access,
+          dryRun: !opts.yes,
+          allowDirty: Boolean(opts.allowDirty),
+          token: process.env.KITSUNE_PUBLISH_TOKEN || undefined,
+          expectedSha,
+          log: (m) => console.log(m),
+        });
+        if (result.output) console.log(`\n${result.output}`);
+        if (result.dryRun) {
+          console.log('\nThis was a rehearsal; nothing was uploaded. Run again with --yes to publish.');
+        } else {
+          console.log(`\nPublished ${result.name}@${result.version} to ${result.registry} (tag ${result.tag}).`);
+          if (session) {
+            await session.markPublished(opts.request);
+            console.log('The request is now marked published.');
+          }
+        }
+      } catch (err) {
+        console.error(`error: ${err.message}`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
     .command('browsers [names...]')
     .description('Install the Playwright browsers Kitsune uses (default: firefox webkit; chromium is installed by Playwright on first run)')
     .action((names) => {
