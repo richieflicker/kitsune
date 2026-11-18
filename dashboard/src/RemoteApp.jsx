@@ -3,8 +3,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import App from './App.jsx';
+import Requests from './Requests.jsx';
 import { remote } from './api.js';
 
+const onRequestsHash = () => window.location.hash === '#/requests';
 const buildIdFromHash = () => /^#\/builds\/([^/]+)/.exec(window.location.hash)?.[1] ?? null;
 
 function ago(iso) {
@@ -26,6 +28,7 @@ export default function RemoteApp() {
   const [selectedId, setSelectedId] = useState(buildIdFromHash());
   const [error, setError] = useState(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [view, setView] = useState(onRequestsHash() ? 'requests' : 'builds');
 
   useEffect(() => {
     remote.session().then(setSession).catch(() => setSession(null));
@@ -47,7 +50,10 @@ export default function RemoteApp() {
   }, [session, loadBuilds]);
 
   useEffect(() => {
-    const onHash = () => setSelectedId(buildIdFromHash());
+    const onHash = () => {
+      setView(onRequestsHash() ? 'requests' : 'builds');
+      setSelectedId(buildIdFromHash());
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -57,7 +63,8 @@ export default function RemoteApp() {
     setSelectedId(id);
   };
 
-  const readOnly = Boolean(session?.readOnly);
+  // Signed out = view only. Signed in but without the reviewer role (viewer, contributor) = also no approve buttons.
+  const readOnly = Boolean(session?.readOnly) || (session ? !(session.can ?? ['review']).includes('review') : false);
   const source = useMemo(() => (selectedId ? { ...remote.sourceFor(selectedId), readOnly } : null), [selectedId, readOnly]);
 
   if (session === undefined) return <div className="empty"><h2>Loading…</h2></div>;
@@ -65,15 +72,24 @@ export default function RemoteApp() {
 
   const header = (
     <div className="remote-bar">
-      <select aria-label="Build" value={selectedId ?? ''} onChange={(e) => select(e.target.value)}>
-        {!builds.some((b) => b.id === selectedId) && selectedId && <option value={selectedId}>{selectedId}</option>}
-        {builds.map((b) => (
-          <option key={b.id} value={b.id}>{buildLabel(b)}</option>
-        ))}
-      </select>
-      <button className="btn" onClick={loadBuilds} title="Refresh the build list">Refresh</button>
-      <span className="muted">{session.project} · {readOnly ? 'view only' : session.name}</span>
-      {readOnly ? (
+      {view === 'builds' && (
+        <>
+          <select aria-label="Build" value={selectedId ?? ''} onChange={(e) => select(e.target.value)}>
+            {!builds.some((b) => b.id === selectedId) && selectedId && <option value={selectedId}>{selectedId}</option>}
+            {builds.map((b) => (
+              <option key={b.id} value={b.id}>{buildLabel(b)}</option>
+            ))}
+          </select>
+          <button className="btn" onClick={loadBuilds} title="Refresh the build list">Refresh</button>
+        </>
+      )}
+      {!session.readOnly && (
+        <button className={`btn ${view === 'requests' ? 'btn-primary' : ''}`} onClick={() => { window.location.hash = view === 'requests' ? '' : '#/requests'; }}>
+          {view === 'requests' ? 'Back to builds' : 'Requests'}
+        </button>
+      )}
+      <span className="muted">{session.project} · {session.readOnly ? 'view only' : `${session.name}${session.role ? ` (${session.role})` : ''}`}</span>
+      {session.readOnly ? (
         <button className="btn btn-primary" onClick={() => setSigningIn(true)}>Sign in to review</button>
       ) : (
         <button
@@ -88,6 +104,15 @@ export default function RemoteApp() {
       )}
     </div>
   );
+
+  if (view === 'requests' && !session.readOnly) {
+    return (
+      <div className="app">
+        <header className="topbar"><h1>🦊 Kitsune Review</h1>{header}</header>
+        <Requests session={session} />
+      </div>
+    );
+  }
 
   if (!source) {
     return (

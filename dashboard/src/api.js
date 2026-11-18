@@ -49,6 +49,10 @@ export const remote = {
   login: (token, name) => request('/api/v1/login', json('POST', { token, name })),
   logout: () => request('/api/v1/logout', json('POST')),
   builds: () => request('/api/v1/builds?limit=40', { headers: CSRF }),
+  requests: () => request('/api/v1/requests?limit=100', { headers: CSRF }),
+  request: (id) => request(`/api/v1/requests/${id}`, { headers: CSRF }),
+  submitRequest: (input) => request('/api/v1/requests', json('POST', input)),
+  moveRequest: (id, action, payload) => request(`/api/v1/requests/${id}/${action}`, json('POST', payload)),
   sourceFor: (buildId) => ({
     loadBuild: () => request(`/api/v1/builds/${buildId}`, { headers: CSRF }),
     act: (action, payload) => request(`/api/v1/builds/${buildId}/${action}`, json('POST', payload)),
