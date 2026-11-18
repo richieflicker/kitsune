@@ -75,3 +75,26 @@ test('measureDiff ignores non-red pixels', () => {
   const data = new Uint8Array(16 * 16 * 4).fill(255);
   assert.deepEqual(measureDiff(data, 16, 16), { bboxRatio: 0, regions: 0 });
 });
+
+import { impactForStory } from '../src/impact.js';
+
+test('impactForStory: picks the story, reports the worst level and handles unknowns', () => {
+  const manifest = {
+    buildId: 'b1',
+    stories: [
+      { id: 'button--primary', key: 'k1', viewport: 'desktop', browser: 'chromium', status: 'changed', impact: 'minor', diffRatio: 0.002, bboxRatio: 0.01, regions: 1 },
+      { id: 'button--primary', key: 'k2', viewport: 'mobile', browser: 'chromium', status: 'changed', impact: 'major', diffRatio: 0.2, bboxRatio: 0.6, regions: 3, sizeChanged: true },
+      { id: 'card--default', key: 'k3', viewport: 'desktop', browser: 'chromium', status: 'unchanged' },
+    ],
+  };
+  const res = impactForStory(manifest, 'button--primary');
+  assert.equal(res.found, true);
+  assert.equal(res.worst, 'major');
+  assert.equal(res.results.length, 2);
+  assert.equal(impactForStory(manifest, 'card--default').worst, 'none');
+  assert.equal(impactForStory(manifest, 'missing').found, false);
+  // a manifest written before impact scoring existed
+  const old = impactForStory({ stories: [{ id: 'a', key: 'k', status: 'changed' }] }, 'a');
+  assert.equal(old.results[0].impact, 'unknown');
+  assert.equal(impactForStory({ stories: [{ id: 'a', key: 'k', status: 'new' }] }, 'a').worst, 'new');
+});

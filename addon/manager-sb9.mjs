@@ -6,7 +6,8 @@
 //
 // Storybook 9+ entry (imports from 'storybook/manager-api'). manager-sb8.mjs is the Storybook 8 twin.
 import * as React from 'react';
-import { addons, types, experimental_getTestProviderStore } from 'storybook/manager-api';
+import { addons, types, useStorybookState, experimental_getTestProviderStore } from 'storybook/manager-api';
+import { createImpactPanel } from './impact-panel.mjs';
 
 const ADDON_ID = 'kitsune-review';
 // The sign-in cookie is SameSite=Strict, so the dashboard must be on the same *site* as Storybook. The browser
@@ -206,6 +207,14 @@ addons.register(ADDON_ID, (storybookApi) => {
         }),
     });
   }
+
+  // Bottom panel next to Controls / Actions: how much did this story change against its baseline?
+  addons.add(`${ADDON_ID}/panel`, {
+    type: types.PANEL,
+    title: 'Visual changes',
+    match: ({ viewMode }) => viewMode === 'story',
+    render: createImpactPanel({ React, useStorybookState, base: BASE, openTab: () => storybookApi.applyQueryParams({ tab: `${ADDON_ID}/tab` }) }),
+  });
 
   addons.add(`${ADDON_ID}/tab`, {
     type: types.TAB,

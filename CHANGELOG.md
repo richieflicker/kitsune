@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **Visual changes panel** in the Storybook bottom bar (next to Controls / Actions), for Storybook 8 and 9+. Shows the impact level, how much of the page changed, how many areas, and before / after / difference thumbnails for the open story, with a viewport and browser picker. Reads the new `GET /api/impact?story=<id>` from `kitsune serve`.
 - **Impact scoring**: every compared story now carries `impact` (`none`, `minor`, `moderate`, `major`), `bboxRatio` (how much of the page the change spans) and `regions` (separate changed areas). A page that changed size is always `major`. Thresholds can be tuned with the new `impact` config key.
 
 ## 0.3.0

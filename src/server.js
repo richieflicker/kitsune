@@ -10,6 +10,7 @@ import { compareBranches, fetchRemote, listBranches, remoteUrl } from './branche
 import { pullRequestLink } from './pr-link.js';
 import { review, runCheck } from './check.js';
 import { createStore } from './store.js';
+import { impactForStory } from './impact.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_DIST = path.resolve(here, '..', 'dashboard', 'dist');
@@ -232,6 +233,12 @@ export function startServer(cfg, options = {}) {
       if (req.method === 'GET' && pathname === '/api/build') {
         const manifest = store.readManifest();
         return manifest ? send(res, 200, manifest) : send(res, 404, { error: 'No build yet. Run `kitsune check`.' });
+      }
+
+      if (req.method === 'GET' && pathname === '/api/impact') {
+        const storyId = url.searchParams.get('story');
+        if (!storyId) return send(res, 400, { error: 'Provide ?story=<story id>' });
+        return send(res, 200, impactForStory(store.readManifest(), storyId));
       }
 
       if (req.method === 'POST' && (pathname === '/api/approve' || pathname === '/api/reject')) {
