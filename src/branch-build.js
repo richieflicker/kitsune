@@ -244,8 +244,8 @@ export function createBranchBuilder(cfg, { cwd = process.cwd(), capture = captur
       } else {
         fs.copyFileSync(path.join(baseShots.dir, `${e.key}.png`), store.baselineFile(e.key));
         const rules = resolveRules(cfg, e.story, viewport, browser);
-        const res = comparePngs(store.baselineFile(e.key), store.newFile(e.key), store.diffFile(e.key), compareRules(rules));
-        Object.assign(item, { diffPixels: res.diffPixels, diffRatio: res.diffRatio, sizeChanged: res.sizeChanged });
+        const res = comparePngs(store.baselineFile(e.key), store.newFile(e.key), store.diffFile(e.key), compareRules(rules), cfg.impact);
+        Object.assign(item, { diffPixels: res.diffPixels, diffRatio: res.diffRatio, sizeChanged: res.sizeChanged, impact: res.impact, bboxRatio: res.bboxRatio, regions: res.regions });
         if (exceedsAllowance(res, rules)) {
           item.status = 'changed';
           item.diffImage = `/images/diff/${e.key}.png`;
