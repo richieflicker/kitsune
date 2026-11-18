@@ -10,6 +10,18 @@ kitsune check   →  screenshots every story (Chromium, Firefox, WebKit), diffs 
 kitsune serve   →  review dashboard: side-by-side / slider / diff views, approve or reject per story
 ```
 
+<p align="center">
+  <a href="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.mp4"><img src="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.gif" alt="Kitsune Review: a reviewer opens a request, compares before and after with a slider, and approves" width="860"></a>
+  <br><sub>A 25-second tour: open a request, compare with the slider, see the diff, approve. (<a href="https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/kitsune-demo.mp4">sharper MP4</a>)</sub>
+</p>
+
+**Why Kitsune?**
+- **Self-hosted and free.** Your screenshots stay on your machine or your server. No per-snapshot pricing.
+- **Works without CI.** Run it locally and approvals live in git, or add the small shared server (SQLite, no Docker) when a team needs web approvals.
+- **Built for teams.** Four roles (viewer, contributor, reviewer, admin), review requests, an admin overview and Zoho Cliq alerts.
+- **Shows how big a change is.** Every changed story is tagged Minor, Moderate or Major, so reviewers look at the risky ones first.
+- **Lives in Storybook.** A Kitsune tab and a "Visual changes" panel next to Controls, for Storybook 8, 9 and 10.
+
 **Every command and every setting explained: [COMMANDS.md](./COMMANDS.md).**
 
 ## Quick start (try it on the bundled mock Storybook)
@@ -166,6 +178,13 @@ export default {
   ],
 };
 ```
+
+In Storybook the package adds a **Kitsune** tab for the whole review, and a **Visual changes** panel next to Controls
+and Actions that shows the impact of the story you have open:
+
+![Visual changes panel in Storybook](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/storybook-panel.png)
+
+![Kitsune tab in Storybook](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/storybook-tab.png)
 
 Run `npx kitsune serve` next to Storybook (local mode, default `http://127.0.0.1:4455`), or set `url` to your
 shared review server. The `KITSUNE_URL` environment variable works instead of the option.
@@ -324,14 +343,51 @@ require an `X-Requested-With` header. Login is limited to 10 failures per 15 min
 ### Teams, roles and review requests
 
 Each person gets a personal token and one of four roles (`kitsune server add-user <project> "Name" --role <role>`, or
-the **Users** page in the dashboard):
+the **Users** page in the dashboard). What they see depends on their role:
 
-| Role | Can |
-|---|---|
-| `viewer` | look at builds |
-| `contributor` | look, and send review requests; sees only their own requests |
-| `reviewer` | also approve, reject or ask for changes |
-| `admin` | everything, including Users and Settings |
+| Role | Lands on | Can do |
+|---|---|---|
+| **Admin** | Overview | everything, plus Users and Settings |
+| **Reviewer** | Requests | approve, reject, ask for changes |
+| **Contributor** | My requests | send review requests (sees only their own), follow them, open their build read-only |
+| **Viewer** | Builds | look only |
+
+**Admin: Overview.** What needs action, who is on the team, recent activity.
+
+![Admin overview](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/admin-overview.png)
+
+**Review a build.** Impact badge per story, sorted by biggest change; side by side, slider, diff, blink.
+
+![Review with slider](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/review-slider.png)
+
+**Reviewer: the queue.** Approve, ask for changes or reject, with a reason that goes to the contributor.
+
+![Reviewer queue](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/reviewer-queue.png)
+
+**Contributor: my requests.** Send a branch for review, see where it stands, open the changes.
+
+![Contributor requests](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/contributor-requests.png)
+
+<details>
+<summary>More screens: sign-in, Users, Settings, viewer</summary>
+
+**Sign-in**
+
+![Sign-in](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/login.png)
+
+**Admin: Users.** Add a person with a role (their token is shown once), change a role, remove someone.
+
+![Users](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/admin-users.png)
+
+**Admin: Settings.** Zoho Cliq alerts: webhook, which events, test message.
+
+![Settings](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/admin-settings.png)
+
+**Viewer.** Read-only builds; no approve or reject buttons.
+
+![Viewer](https://raw.githubusercontent.com/richieflicker/kitsune/main/docs/images/viewer.png)
+
+</details>
 
 A contributor sends a **review request** (branch, exact commit, title). It moves `open` → `building` → `in_review` →
 `approved` → `pr_created` → `published`, or is `rejected` / sent back for `changes_requested` (a reason is required;
