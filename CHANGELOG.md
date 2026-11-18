@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Reviewers and admins could not open **Builds** from their home page (Requests / Overview): the address changed but the page did not. Navigation now always follows the address.
+
 ## 0.5.0
 
 ### Added

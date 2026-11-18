@@ -9,7 +9,7 @@ import Users from './Users.jsx';
 import Overview from './Overview.jsx';
 import { remote } from './api.js';
 
-const viewFromHash = () => (window.location.hash.startsWith('#/requests') ? 'requests' : window.location.hash.startsWith('#/settings') ? 'settings' : window.location.hash.startsWith('#/users') ? 'users' : window.location.hash.startsWith('#/overview') ? 'overview' : 'builds');
+const viewFromHash = (h) => (h.startsWith('#/requests') ? 'requests' : h.startsWith('#/settings') ? 'settings' : h.startsWith('#/users') ? 'users' : h.startsWith('#/overview') ? 'overview' : 'builds');
 const buildIdFromHash = () => /^#\/builds\/([^/]+)/.exec(window.location.hash)?.[1] ?? null;
 
 function ago(iso) {
@@ -31,7 +31,9 @@ export default function RemoteApp() {
   const [selectedId, setSelectedId] = useState(buildIdFromHash());
   const [error, setError] = useState(null);
   const [signingIn, setSigningIn] = useState(false);
-  const [view, setView] = useState(viewFromHash());
+  // The address is the source of truth for the page; keeping it in state makes every hash change re-render.
+  const [hash, setHash] = useState(window.location.hash);
+  const view = viewFromHash(hash);
 
   useEffect(() => {
     remote.session().then(setSession).catch(() => setSession(null));
@@ -54,7 +56,7 @@ export default function RemoteApp() {
 
   useEffect(() => {
     const onHash = () => {
-      setView(viewFromHash());
+      setHash(window.location.hash);
       setSelectedId((cur) => buildIdFromHash() ?? cur);
     };
     window.addEventListener('hashchange', onHash);
@@ -76,7 +78,7 @@ export default function RemoteApp() {
   const can = session.can ?? [];
   // With no section in the address, each role lands where its work is: viewers on builds, everyone else on requests.
   const home = can.includes('manageUsers') ? 'overview' : !session.readOnly && (can.includes('request') || can.includes('review')) ? 'requests' : 'builds';
-  const here = window.location.hash === '' || window.location.hash === '#' || window.location.hash === '#/' ? home : view;
+  const here = hash === '' || hash === '#' || hash === '#/' ? home : view;
   const tabs = [
     { id: 'overview', label: 'Overview', hash: '#/overview', show: can.includes('manageUsers') },
     { id: 'builds', label: 'Builds', hash: '#/builds', show: true },
