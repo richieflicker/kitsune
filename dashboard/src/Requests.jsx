@@ -160,20 +160,53 @@ export default function Requests({ session }) {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [filter, setFilter] = useState('active');
+  const [filter, setFilter] = useState(null); // null = pick a sensible start once the list has loaded
 
   const load = useCallback(() => remote.requests().then((r) => setList(r.requests)).catch((e) => setError(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
-  const canSubmit = (session.can ?? []).includes('request');
+  const can = session.can ?? [];
+  const canSubmit = can.includes('request');
+  const isAdmin = can.includes('manageUsers');
   const done = (s) => ['published', 'rejected'].includes(s);
-  const shown = (list ?? []).filter((r) => (filter === 'all' ? true : filter === 'active' ? !done(r.state) : done(r.state)));
+  // "Needs me": what this role is expected to act on next.
+  const needsMe = (r) => {
+    if (isAdmin) return ['open', 'building', 'in_review', 'approved', 'pr_created'].includes(r.state);
+    if (can.includes('review')) return r.state === 'in_review';
+    return r.state === 'changes_requested';
+  };
+  const attention = (list ?? []).filter(needsMe).length;
+  const counts = {};
+  for (const r of list ?? []) counts[r.state] = (counts[r.state] ?? 0) + 1;
+
+  const current = filter ?? (list ? (attention > 0 ? 'attention' : 'active') : 'active');
+  const matches = (r) => {
+    if (current === 'all') return true;
+    if (current === 'active') return !done(r.state);
+    if (current === 'done') return done(r.state);
+    if (current === 'attention') return needsMe(r);
+    return r.state === current.replace('state:', '');
+  };
+  const shown = (list ?? []).filter(matches);
+  const mine = !can.includes('review') && !isAdmin; // contributors only ever see their own requests
+  const SUMMARY = ['open', 'building', 'in_review', 'approved', 'changes_requested'];
 
   return (
     <div className="requests">
       <div className="req-list">
+        <h2 className="req-heading">{mine ? 'My requests' : isAdmin ? 'Review queue' : 'Needs review'}</h2>
+        {!mine && list && (
+          <div className="req-summary">
+            {SUMMARY.map((st) => (
+              <button key={st} className={`req-count ${current === `state:${st}` ? 'is-on' : ''}`} onClick={() => setFilter(`state:${st}`)}>
+                <strong>{counts[st] ?? 0}</strong> {STATE_LABEL[st]}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="req-toolbar">
-          <select aria-label="Filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select aria-label="Filter" value={current.startsWith('state:') ? 'all' : current} onChange={(e) => setFilter(e.target.value)}>
+            <option value="attention">{mine ? 'Needs my changes' : 'Needs my attention'} ({attention})</option>
             <option value="active">Open requests</option>
             <option value="done">Finished</option>
             <option value="all">All</option>
@@ -182,7 +215,7 @@ export default function Requests({ session }) {
           {canSubmit && <button className="btn btn-primary" onClick={() => { setCreating(true); setSelected(null); }}>New request</button>}
         </div>
         {error && <div className="banner">{error}</div>}
-        {list && shown.length === 0 && <p className="muted req-empty">{canSubmit ? 'Nothing here yet. Press "New request" to ask for a review.' : 'Nothing here.'}</p>}
+        {list && shown.length === 0 && <p className="muted req-empty">{current === 'attention' ? 'Nothing is waiting for you. 🎉' : canSubmit ? 'Nothing here yet. Press "New request" to ask for a review.' : 'Nothing here.'}</p>}
         <ul>
           {shown.map((r) => (
             <li key={r.id}>
