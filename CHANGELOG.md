@@ -1,18 +1,15 @@
 # Changelog
 
-## Unreleased
-
-- **Admin Overview.** Admins now open on an Overview page: requests needing action, builds with changes waiting, people by role, whether Zoho Cliq alerts are on, the request pipeline by state, what needs action, recent activity and the latest builds. New admin-only API `GET /api/v1/overview`.
-- **Impact scoring on the shared server.** Every changed snapshot now gets a Minor / Moderate / Major level (same rules as local `kitsune check`), stored with the build, so the review-list badges use the real score instead of an estimate. Existing databases are upgraded automatically; builds made before this keep the estimated badge.
-
-
-- **Role home pages.** After sign-in, contributors land on "My requests", reviewers on "Needs review", admins on the Overview page; viewers land on builds. Requests have a "Needs my attention" filter that is the default when something is waiting. The sign-in page now says what the token looks like and where to get one.
-
-- **Users page for admins.** Add a person with a role (token shown once), change a role, or remove someone, from the dashboard instead of the CLI. New admin-only API: `GET/POST /api/v1/users`, `PUT /api/v1/users/:name/role`, `DELETE /api/v1/users/:name`.
-- **Impact badges and sort** in the review list; the top bar has role-aware tabs.
+## 0.5.0
 
 ### Added
-- **Parallel branch builds**: start several Build & review runs and they queue, with up to `branches.concurrency` (default 2, max 4) running together. Each build has its own review, so you can open and approve a finished one while the others still build. Asking for a pair that is already queued or running returns that build, and two builds that need the same commit build it once. The Branches page now lists every build with its state.
+- **Admin Overview.** Admins open on an Overview page: requests needing action, builds with changes waiting, people by role, whether Zoho Cliq alerts are on, the request pipeline by state, recent activity and the latest builds. New admin-only API `GET /api/v1/overview`.
+- **Users page for admins.** Add a person with a role (token shown once), change a role, or remove someone, from the dashboard instead of the CLI. New admin-only API: `GET/POST /api/v1/users`, `PUT /api/v1/users/:name/role`, `DELETE /api/v1/users/:name`.
+- **Role home pages.** After sign-in, contributors land on "My requests", reviewers on "Needs review", admins on Overview; viewers land on builds. Requests have a "Needs my attention" filter, and reviewers and admins get a count per state. The sign-in page says what the token looks like and where to get one.
+- **Request to build link.** A request shows "See the changes" for the uploaded build of its commit (read-only for contributors and viewers).
+- **Impact scoring on the shared server.** Every changed snapshot gets a Minor / Moderate / Major level (same rules as local `kitsune check`), stored with the build. Existing databases are upgraded automatically; builds made before this keep an estimated badge.
+- **Impact badges and sort** in the review list, and a top bar with role-aware tabs and a name + role badge.
+- **Parallel branch builds**: start several Build & review runs and they queue, with up to `branches.concurrency` (default 2, max 4) running together. Each build has its own review. Asking for a pair that is already queued or running returns that build, and two builds that need the same commit build it once. The Branches page lists every build with its state.
 
 ## 0.4.0
 
