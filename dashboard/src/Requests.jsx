@@ -73,9 +73,18 @@ function Detail({ id, session, onChanged }) {
   const [reason, setReason] = useState('');
   const [sha, setSha] = useState('');
   const [busy, setBusy] = useState(false);
+  const [build, setBuild] = useState(null); // the uploaded build for this commit, if there is one
 
   const load = useCallback(() => remote.request(id).then(setReq).catch((e) => setError(e.message)), [id]);
   useEffect(() => { setReq(null); setError(null); setReason(''); setSha(''); load(); }, [load]);
+
+  useEffect(() => {
+    if (!req) return;
+    remote.builds().then(({ builds }) => {
+      // Newest first; the request's commit may be a short prefix of the build's.
+      setBuild(builds.find((b) => b.commit && (b.commit.startsWith(req.sha) || req.sha.startsWith(b.commit))) ?? null);
+    }).catch(() => setBuild(null));
+  }, [req?.sha]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) return <div className="banner">{error}</div>;
   if (!req) return <p className="muted">Loading…</p>;
@@ -108,6 +117,15 @@ function Detail({ id, session, onChanged }) {
         {req.requester} · <code>{req.source}</code> → <code>{req.target}</code> · commit <code>{req.sha.slice(0, 12)}</code> · {ago(req.updatedAt)}
       </p>
       {req.note && <p className="req-note">{req.note}</p>}
+      <p>
+        {build ? (
+          <a className="btn btn-primary" href={`#/builds/${build.id}`}>
+            See the changes{build.pending ? ` (${build.pending} to review)` : ''}
+          </a>
+        ) : (
+          <span className="muted">No build for this commit has been uploaded yet.</span>
+        )}
+      </p>
       {req.reason && (req.state === 'rejected' || req.state === 'changes_requested') && <div className="banner">{req.reason}</div>}
       {error && <div className="banner">{error}</div>}
 
