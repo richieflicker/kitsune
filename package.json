@@ -1,6 +1,6 @@
 {
   "name": "kitsune-review",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Self-hosted visual regression review for Storybook: capture every story, diff against approved baselines, approve in the browser. Includes a Storybook tab.",
   "scripts": {
     "build:dashboard": "npm --prefix dashboard install --no-audit --no-fund && npm --prefix dashboard run build",

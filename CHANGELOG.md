@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 ### Added
 - **`kitsune publish`**: publish to Verdaccio (or npm) from your own machine, with the checks that make "approved" mean something. Rehearses by default (`--yes` to publish). Refuses a dirty tree, a version the registry already has, a private package, or a missing login. With `--request <id> --server <url>` it only publishes an approved request on the approved commit, then marks the request published. Tokens come from your environment or your own `npm adduser`, are never stored, and are scrubbed from error output.
