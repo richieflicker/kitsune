@@ -68,6 +68,9 @@ export const defaults = {
   // ---- how a screenshot is compared with its baseline ----
   includeAA: false, // true = count anti-aliased edge pixels as differences too
   allowSizeChange: false, // true = a page that got taller/shorter is judged by its pixels like any other change
+  // How drastic a change counts as minor / moderate / major (see src/impact.js for the defaults). Any key can be overridden:
+  // impact: { minor: 0.005, major: 0.05, bboxMajor: 0.4, regionsModerate: 4, regionsMajor: 12 }
+  impact: {},
   maxDiffRatio: null, // e.g. 0.001 = tolerate up to 0.1% of the page; a story changes only above BOTH limits
 
   // Per-story adjustments, later entries win:

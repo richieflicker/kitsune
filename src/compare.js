@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
+import { impactLevel, measureDiff } from './impact.js';
 
 const readPng = (file) => PNG.sync.read(fs.readFileSync(file));
 
@@ -18,7 +19,7 @@ function padTo(img, width, height) {
  * Compare two PNGs. Different sizes are padded to the larger one and always
  * count as a change (a layout that grew or shrank is a real regression).
  */
-export function comparePngs(baselineFile, newFile, diffFile, { threshold, includeAA = false }) {
+export function comparePngs(baselineFile, newFile, diffFile, { threshold, includeAA = false }, impactThresholds) {
   const a = readPng(baselineFile);
   const b = readPng(newFile);
   const sizeChanged = a.width !== b.width || a.height !== b.height;
@@ -32,5 +33,8 @@ export function comparePngs(baselineFile, newFile, diffFile, { threshold, includ
   });
 
   if (diffPixels > 0 || sizeChanged) fs.writeFileSync(diffFile, PNG.sync.write(diff));
-  return { diffPixels, diffRatio: diffPixels / (width * height), sizeChanged };
+  const diffRatio = diffPixels / (width * height);
+  const { bboxRatio, regions } = measureDiff(diff.data, width, height);
+  const impact = impactLevel({ diffPixels, diffRatio, bboxRatio, regions, sizeChanged }, impactThresholds);
+  return { diffPixels, diffRatio, sizeChanged, bboxRatio, regions, impact };
 }

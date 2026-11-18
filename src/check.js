@@ -97,10 +97,11 @@ export async function runCheck(cfg, { log = () => {}, progress = () => {} } = {}
       item.newImage = imageUrl('new', r.key);
       item.baselineImage = imageUrl('baselines', r.key);
     } else {
-      const res = comparePngs(store.baselineFile(r.key), store.newFile(r.key), store.diffFile(r.key), compareRules(r.rules));
+      const res = comparePngs(store.baselineFile(r.key), store.newFile(r.key), store.diffFile(r.key), compareRules(r.rules), cfg.impact);
       item.diffPixels = res.diffPixels;
       item.diffRatio = res.diffRatio;
       item.sizeChanged = res.sizeChanged;
+      Object.assign(item, { impact: res.impact, bboxRatio: res.bboxRatio, regions: res.regions });
       item.newImage = imageUrl('new', r.key);
       item.baselineImage = imageUrl('baselines', r.key);
       if (exceedsAllowance(res, r.rules)) {
