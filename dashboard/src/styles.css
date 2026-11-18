@@ -244,3 +244,11 @@ a.btn-primary { color: #fff; }
 .br-job { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: grid; gap: 4px; }
 .br-job-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .br-job-head > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* Impact badges and sort */
+.sortbar { padding: 6px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
+.sortbar select { font-size: 12px; padding: 3px 6px; }
+.impact { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; }
+.impact-minor { color: #0369a1; background: #0ea5e91a; border-color: #0ea5e955; }
+.impact-moderate { color: #b45309; background: #f59e0b1a; border-color: #f59e0b66; }
+.impact-major { color: #b91c1c; background: #ef44441a; border-color: #ef444466; }
