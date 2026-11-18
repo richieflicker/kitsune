@@ -83,3 +83,15 @@ test('baseAncestors returns the merge-base first, ignoring commits main gained a
   assert.equal(baseAncestors('nope', { cwd: dir }), null);
   assert.ok(!baseAncestors('main', { cwd: dir }).includes(c2));
 });
+
+test('the shared server stores how big each change is, and the manifest carries it', async () => {
+  const { svc, project, run } = await setup();
+  await run('main', 'a'.repeat(40), RED); // baseline
+  const { id } = await svc.createBuild(project, { branch: 'feature/i', commit: 'b'.repeat(40), expected: 1 });
+  svc.putSnapshot(project, id, KEY, { storyId: 'a', title: 'A', name: 'a', viewport: 'desktop', browser: 'chromium', rules: {} }, BLUE);
+  const s = (await svc.finalize(project, id)).stories[0];
+  assert.equal(s.status, 'changed');
+  assert.equal(s.impact, 'major'); // the whole picture changed colour
+  assert.ok(s.bboxRatio > 0.9 && s.regions > 0);
+  assert.equal((await svc.getBuild(project, id)).stories[0].impact, 'major'); // read back from the database
+});

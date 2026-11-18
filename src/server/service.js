@@ -132,6 +132,9 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       diffPixels: r.diff_pixels,
       diffRatio: r.diff_ratio,
       sizeChanged: Boolean(r.size_changed),
+      impact: r.impact ?? undefined,
+      bboxRatio: r.bbox_ratio || undefined,
+      regions: r.regions || undefined,
       error: r.error ?? undefined,
       note: r.note ?? undefined,
       newImage: r.image_hash ? `/api/v1/images/${r.image_hash}.png` : undefined,
@@ -551,7 +554,7 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
         return { row: { status: 'error', baselineHash: baseline.image_hash, error: `Could not compare images: ${err.message}` }, approvals: [] };
       }
 
-      const base = { baselineHash: baseline.image_hash, diffPixels: res.diffPixels, diffRatio: res.diffRatio, sizeChanged: res.sizeChanged };
+      const base = { baselineHash: baseline.image_hash, diffPixels: res.diffPixels, diffRatio: res.diffRatio, sizeChanged: res.sizeChanged, impact: res.impact, bboxRatio: res.bboxRatio, regions: res.regions };
       if (!exceedsAllowance(res, rules)) {
         if (fs.existsSync(diffFile)) fs.rmSync(diffFile);
         return { row: { ...base, status: 'unchanged' }, approvals: [] };
