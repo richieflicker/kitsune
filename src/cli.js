@@ -332,19 +332,26 @@ export async function main(argv) {
     }
   });
 
-  withFolders(server.command('add-reviewer <project> <name>').description('Issue a personal review token (shown once). Approvals are recorded under that name.')).action(async (project, name, opts) => {
+  withFolders(server.command('add-reviewer <project> <name>').alias('add-user').option('--role <role>', 'viewer | contributor | reviewer | admin (default reviewer)', 'reviewer').description('Issue a personal token (shown once). Approvals are recorded under that name.')).action(async (project, name, opts) => {
     await withService(opts, (svc) => {
-      const r = svc.addReviewer(project, name);
-      console.log(`Reviewer "${r.name}" on project "${r.project.name}"\n\nSave this now. It is stored hashed and cannot be shown again.\n`);
-      console.log(`  Personal review token : ${r.token}`);
+      const r = svc.addReviewer(project, name, opts.role);
+      console.log(`${r.role} "${r.name}" on project "${r.project.name}"\n\nSave this now. It is stored hashed and cannot be shown again.\n`);
+      console.log(`  Personal token : ${r.token}`);
     });
   });
 
-  withFolders(server.command('list-reviewers <project>').description('Show who has a personal review token')).action(async (project, opts) => {
+  withFolders(server.command('set-role <project> <name> <role>').description('Change what a person may do: viewer | contributor | reviewer | admin')).action(async (project, name, role, opts) => {
+    await withService(opts, (svc) => {
+      const r = svc.setRole(project, name, role);
+      console.log(`"${r.name}" is now ${r.role} on "${r.project.name}". It applies on their next request.`);
+    });
+  });
+
+  withFolders(server.command('list-reviewers <project>').alias('list-users').description('Show who has a personal token and their role')).action(async (project, opts) => {
     await withService(opts, (svc) => {
       const rows = svc.listReviewers(project);
-      if (!rows.length) return console.log('No personal tokens yet. Add one with: kitsune server add-reviewer <project> <name>');
-      for (const r of rows) console.log(`${r.revoked_at ? 'revoked' : 'active '}  ${r.name}  (added ${r.created_at.slice(0, 10)}${r.revoked_at ? `, revoked ${r.revoked_at.slice(0, 10)}` : ''})`);
+      if (!rows.length) return console.log('No personal tokens yet. Add one with: kitsune server add-user <project> <name> --role admin');
+      for (const r of rows) console.log(`${r.revoked_at ? 'revoked' : 'active '}  ${r.name}  [${r.role}]  (added ${r.created_at.slice(0, 10)}${r.revoked_at ? `, revoked ${r.revoked_at.slice(0, 10)}` : ''})`);
     });
   });
 
