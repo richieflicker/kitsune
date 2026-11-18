@@ -238,3 +238,9 @@ a.btn-primary { color: #fff; }
 .set-field input { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
 .set-events { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: grid; gap: 6px; font-size: 13px; }
 .set-events legend { font-weight: 600; padding: 0 6px; }
+
+/* build queue */
+.br-jobs ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.br-job { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: grid; gap: 4px; }
+.br-job-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.br-job-head > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
