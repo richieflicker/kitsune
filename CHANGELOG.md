@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **Four eyes on request approval.** Whoever sent a request or built it (started or finished the build) cannot approve it; another reviewer or admin has to. Asking for changes or rejecting is still allowed. The dashboard hides the Approve button and says why. One-person teams can switch it off with `KITSUNE_ALLOW_SELF_APPROVAL=1`.
+
 ### Fixed
 - Reviewers and admins could not open **Builds** from their home page (Requests / Overview): the address changed but the page did not. Navigation now always follows the address.
 

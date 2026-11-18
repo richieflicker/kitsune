@@ -90,7 +90,9 @@ function Detail({ id, session, onChanged }) {
   if (!req) return <p className="muted">Loading…</p>;
 
   const can = new Set(session.can ?? []);
-  const moves = MOVES.filter((m) => m.from.includes(req.state) && can.has(m.needs) && (!m.owner || req.requester === session.name));
+  const blocked = req.blockedActions ?? [];
+  const moves = MOVES.filter((m) => m.from.includes(req.state) && can.has(m.needs) && !blocked.includes(m.action) && (!m.owner || req.requester === session.name));
+  const mustWait = blocked.includes('approve') && req.state === 'in_review' && can.has('review');
   const needsReason = moves.some((m) => m.reason);
 
   const go = async (m) => {
@@ -133,6 +135,7 @@ function Detail({ id, session, onChanged }) {
         <div className="req-actions">
           {needsReason && <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (needed to reject or ask for changes)" maxLength={500} />}
           {moves.some((m) => m.sha) && <input value={sha} onChange={(e) => setSha(e.target.value)} placeholder="New commit (optional, if you pushed again)" pattern="[0-9a-fA-F]{7,40}" />}
+          {mustWait && <p className="muted">You sent or built this request, so another reviewer or admin has to approve it.</p>}
           <div className="req-buttons">
             {moves.map((m) => (
               <button key={m.action} className={`btn ${m.primary ? 'btn-primary' : ''} ${m.danger ? 'btn-reject' : ''}`} disabled={busy || (m.reason && !reason.trim())} onClick={() => go(m)}>{m.label}</button>

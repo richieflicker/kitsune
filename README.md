@@ -391,7 +391,7 @@ the **Users** page in the dashboard). What they see depends on their role:
 
 A contributor sends a **review request** (branch, exact commit, title). It moves `open` → `building` → `in_review` →
 `approved` → `pr_created` → `published`, or is `rejected` / sent back for `changes_requested` (a reason is required;
-only the requester resubmits). Every step is checked against the person's role and kept in an append-only history.
+only the requester resubmits). Every step is checked against the person's role and kept in an append-only history. **Four eyes:** whoever sent or built a request cannot approve it, so a second person always signs off (a solo team can switch this off with `KITSUNE_ALLOW_SELF_APPROVAL=1`).
 Builds happen on an admin's own machine for now: build the branch, upload it, then mark the request built. Contributors
 see where their request stands and can open its build read-only.
 
