@@ -3,7 +3,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Viewer from './Viewer.jsx';
-import { useTheme, useUi } from './ui.jsx';
+import { useTheme, useUi, usePref } from './ui.jsx';
+import { impactOf, impactRank } from './impact.js';
 
 const FILTERS = [
   { id: 'review', label: 'To review', match: (s) => s.status === 'changed' || s.status === 'rejected' || s.status === 'error' },
@@ -34,10 +35,12 @@ export default function App({ source, headerExtra = null, onChanged }) {
 
   const filterDef = FILTERS.find((f) => f.id === filter);
   const inBrowser = useCallback((s) => browser === 'all' || s.browser === browser, [browser]);
-  const stories = useMemo(
-    () => (build ? build.stories.filter(inBrowser).filter(filterDef.match) : []),
-    [build, filterDef, inBrowser],
-  );
+  const [sort, setSort] = usePref('sort', 'impact');
+  const stories = useMemo(() => {
+    const list = build ? build.stories.filter(inBrowser).filter(filterDef.match) : [];
+    // Array.sort is stable, so equal impact keeps the build's own order.
+    return sort === 'impact' ? [...list].sort((a, b) => impactRank(b) - impactRank(a)) : list;
+  }, [build, filterDef, inBrowser, sort]);
   const counts = useMemo(
     () => Object.fromEntries(FILTERS.map((f) => [f.id, build ? build.stories.filter(inBrowser).filter(f.match).length : 0])),
     [build, inBrowser],
@@ -146,6 +149,15 @@ export default function App({ source, headerExtra = null, onChanged }) {
               </button>
             ))}
           </nav>
+          <div className="sortbar">
+            <label>
+              Sort{' '}
+              <select value={sort} onChange={(e) => setSort(e.target.value)}>
+                <option value="impact">Biggest change first</option>
+                <option value="order">Build order</option>
+              </select>
+            </label>
+          </div>
           <ul className="story-list">
             {stories.length === 0 && <li className="muted pad">Nothing to review. The fox found no changes.</li>}
             {stories.map((s) => (
@@ -159,7 +171,11 @@ export default function App({ source, headerExtra = null, onChanged }) {
                       {build.browsers?.length > 1 ? ` · ${s.browser}` : ''}
                     </span>
                   </span>
-                  <span className="story-status">{s.status}</span>
+                  {impactOf(s) && impactOf(s) !== 'none' ? (
+                    <span className={`impact impact-${impactOf(s)}`} title="How much of the picture changed">{impactOf(s)}</span>
+                  ) : (
+                    <span className="story-status">{s.status}</span>
+                  )}
                 </button>
               </li>
             ))}
