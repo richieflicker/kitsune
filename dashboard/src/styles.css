@@ -264,3 +264,14 @@ a.btn-primary { color: #fff; }
 .token-box code { word-break: break-all; font-size: 13px; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
 .token-box .row { display: flex; gap: 8px; }
 .btn-danger { color: #b91c1c; }
+
+/* Role home: request queue summary */
+.req-heading { margin: 0 0 8px; font-size: 18px; }
+.req-summary { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.req-count { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--muted); cursor: pointer; }
+.req-count strong { color: var(--text); }
+.req-count:hover, .req-count.is-on { border-color: var(--text); }
+
+.login .hint-line { font-size: 12px; font-weight: 400; color: var(--muted); }
+.login-more { font-size: 13px; }
+.login-more summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }

@@ -73,6 +73,9 @@ export default function RemoteApp() {
   if (!session || signingIn) return <Login onDone={(s) => { setSigningIn(false); setSession(s); }} onCancel={session ? () => setSigningIn(false) : null} />;
 
   const can = session.can ?? [];
+  // With no section in the address, each role lands where its work is: viewers on builds, everyone else on requests.
+  const home = !session.readOnly && (can.includes('request') || can.includes('review')) ? 'requests' : 'builds';
+  const here = window.location.hash === '' || window.location.hash === '#' || window.location.hash === '#/' ? home : view;
   const tabs = [
     { id: 'builds', label: 'Builds', hash: '#/builds', show: true },
     { id: 'requests', label: 'Requests', hash: '#/requests', show: !session.readOnly },
@@ -84,12 +87,12 @@ export default function RemoteApp() {
     <div className="remote-bar">
       <nav className="nav" aria-label="Sections">
         {tabs.map((t) => (
-          <a key={t.id} href={t.hash} className={`nav-tab ${view === t.id ? 'active' : ''}`} aria-current={view === t.id ? 'page' : undefined}>
+          <a key={t.id} href={t.hash} className={`nav-tab ${here === t.id ? 'active' : ''}`} aria-current={here === t.id ? 'page' : undefined}>
             {t.label}
           </a>
         ))}
       </nav>
-      {view === 'builds' && (
+      {here === 'builds' && (
         <div className="build-pick">
           <select aria-label="Build" value={selectedId ?? ''} onChange={(e) => select(e.target.value)}>
             {!builds.some((b) => b.id === selectedId) && selectedId && <option value={selectedId}>{selectedId}</option>}
@@ -125,7 +128,7 @@ export default function RemoteApp() {
     </div>
   );
 
-  if (view === 'users' && can.includes('manageUsers')) {
+  if (here === 'users' && can.includes('manageUsers')) {
     return (
       <div className="app">
         <header className="topbar"><h1>🦊 Kitsune Review</h1>{header}</header>
@@ -134,7 +137,7 @@ export default function RemoteApp() {
     );
   }
 
-  if (view === 'settings' && (session.can ?? []).includes('manageUsers')) {
+  if (here === 'settings' && (session.can ?? []).includes('manageUsers')) {
     return (
       <div className="app">
         <header className="topbar"><h1>🦊 Kitsune Review</h1>{header}</header>
@@ -143,7 +146,7 @@ export default function RemoteApp() {
     );
   }
 
-  if (view === 'requests' && !session.readOnly) {
+  if (here === 'requests' && !session.readOnly) {
     return (
       <div className="app">
         <header className="topbar"><h1>🦊 Kitsune Review</h1>{header}</header>
@@ -193,15 +196,20 @@ function Login({ onDone, onCancel }) {
     <div className="empty">
       <form className="login" onSubmit={submit}>
         <h2>🦊 Kitsune Review</h2>
-        <p className="muted">Sign in with your review token. Approvals are recorded under your name.</p>
+        <p className="muted">Sign in to review visual changes. Everything you approve or request is recorded under your name.</p>
         <label>
-          Review token
-          <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" required />
+          Your token
+          <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" placeholder="kitsune_rv_…" required autoFocus />
+          <span className="hint-line">Starts with <code>kitsune_rv_</code>. Don't have one? Ask an admin to add you under Users.</span>
         </label>
-        <label>
-          Your name <span className="muted">(only for a shared team token; personal tokens already carry your name)</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={60} />
-        </label>
+        <details className="login-more">
+          <summary>Using a shared team token?</summary>
+          <label>
+            Your name
+            <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={60} />
+            <span className="hint-line">Personal tokens already carry your name, so leave this empty.</span>
+          </label>
+        </details>
         {error && <div className="banner">{error}</div>}
         <button className="btn btn-primary" disabled={busy || !token}>Sign in</button>
         {onCancel && <button type="button" className="btn" onClick={onCancel}>Keep viewing only</button>}

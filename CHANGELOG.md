@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Role home pages.** After sign-in, contributors land on "My requests", reviewers on "Needs review", admins on the review queue with a count per state; viewers land on builds. Requests have a "Needs my attention" filter that is the default when something is waiting. The sign-in page now says what the token looks like and where to get one.
+
 - **Users page for admins.** Add a person with a role (token shown once), change a role, or remove someone, from the dashboard instead of the CLI. New admin-only API: `GET/POST /api/v1/users`, `PUT /api/v1/users/:name/role`, `DELETE /api/v1/users/:name`.
 - **Impact badges and sort** in the review list; the top bar has role-aware tabs.
 
