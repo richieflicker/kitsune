@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS snapshots (
   diff_pixels INTEGER NOT NULL DEFAULT 0,
   diff_ratio REAL NOT NULL DEFAULT 0,
   size_changed INTEGER NOT NULL DEFAULT 0,
+  impact TEXT,
+  bbox_ratio REAL NOT NULL DEFAULT 0,
+  regions INTEGER NOT NULL DEFAULT 0,
   has_diff INTEGER NOT NULL DEFAULT 0,
   error TEXT,
   note TEXT,
@@ -155,6 +158,11 @@ export async function openDb(dataDir) {
   // Small forward-only migrations for databases created by an older version.
   const columns = db.prepare(`PRAGMA table_info(snapshots)`).all().map((c) => c.name);
   if (!columns.includes('rules')) db.exec(`ALTER TABLE snapshots ADD COLUMN rules TEXT`);
+  if (!columns.includes('impact')) {
+    db.exec(`ALTER TABLE snapshots ADD COLUMN impact TEXT`);
+    db.exec(`ALTER TABLE snapshots ADD COLUMN bbox_ratio REAL NOT NULL DEFAULT 0`);
+    db.exec(`ALTER TABLE snapshots ADD COLUMN regions INTEGER NOT NULL DEFAULT 0`);
+  }
   if (!db.prepare(`PRAGMA table_info(builds)`).all().some((c) => c.name === 'ancestors')) db.exec(`ALTER TABLE builds ADD COLUMN ancestors TEXT`);
   if (!db.prepare(`PRAGMA table_info(reviewers)`).all().some((c) => c.name === 'role')) db.exec(`ALTER TABLE reviewers ADD COLUMN role TEXT NOT NULL DEFAULT 'reviewer'`);
   if (!db.prepare(`PRAGMA table_info(sessions)`).all().some((c) => c.name === 'reviewer_id')) db.exec(`ALTER TABLE sessions ADD COLUMN reviewer_id TEXT`);
@@ -188,7 +196,7 @@ export async function openDb(dataDir) {
     snapshot: p(`SELECT * FROM snapshots WHERE build_id = ? AND key = ?`),
     snapshotCount: p(`SELECT COUNT(*) AS n FROM snapshots WHERE build_id = ?`),
     statusCounts: p(`SELECT status, COUNT(*) AS n FROM snapshots WHERE build_id = ? GROUP BY status`),
-    setResult: p(`UPDATE snapshots SET status=?, baseline_hash=?, diff_pixels=?, diff_ratio=?, size_changed=?, has_diff=?, note=?, error=? WHERE build_id=? AND key=?`),
+    setResult: p(`UPDATE snapshots SET status=?, baseline_hash=?, diff_pixels=?, diff_ratio=?, size_changed=?, impact=?, bbox_ratio=?, regions=?, has_diff=?, note=?, error=? WHERE build_id=? AND key=?`),
     setStatus: p(`UPDATE snapshots SET status = ?, note = ? WHERE build_id = ? AND key = ?`),
     projectOwnsImage: p(`SELECT 1 AS ok FROM snapshots s JOIN builds b ON b.id = s.build_id
       WHERE b.project_id = ? AND (s.image_hash = ? OR s.baseline_hash = ?) LIMIT 1`),
@@ -272,7 +280,7 @@ export async function openDb(dataDir) {
     snapshotCount: (buildId) => q.snapshotCount.get(buildId).n,
     statusCounts: (buildId) => q.statusCounts.all(buildId),
     setResult: (buildId, key, r) =>
-      q.setResult.run(r.status, r.baselineHash ?? null, r.diffPixels ?? 0, r.diffRatio ?? 0, r.sizeChanged ? 1 : 0, r.hasDiff ? 1 : 0, r.note ?? null, r.error ?? null, buildId, key),
+      q.setResult.run(r.status, r.baselineHash ?? null, r.diffPixels ?? 0, r.diffRatio ?? 0, r.sizeChanged ? 1 : 0, r.impact ?? null, r.bboxRatio ?? 0, r.regions ?? 0, r.hasDiff ? 1 : 0, r.note ?? null, r.error ?? null, buildId, key),
     setStatus: (buildId, key, status, note) => q.setStatus.run(status, note ?? null, buildId, key),
     projectOwnsImage: (projectId, hash) => Boolean(q.projectOwnsImage.get(projectId, hash, hash)),
 
