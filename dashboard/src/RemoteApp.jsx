@@ -7,7 +7,7 @@ import Requests from './Requests.jsx';
 import Settings from './Settings.jsx';
 import { remote } from './api.js';
 
-const viewFromHash = () => (window.location.hash === '#/requests' ? 'requests' : window.location.hash === '#/settings' ? 'settings' : 'builds');
+const viewFromHash = () => (window.location.hash.startsWith('#/requests') ? 'requests' : window.location.hash.startsWith('#/settings') ? 'settings' : 'builds');
 const buildIdFromHash = () => /^#\/builds\/([^/]+)/.exec(window.location.hash)?.[1] ?? null;
 
 function ago(iso) {
@@ -20,7 +20,7 @@ function ago(iso) {
 
 function buildLabel(b) {
   const state = b.status === 'ready' ? (b.pending ? `${b.pending} to review` : 'approved') : b.status;
-  return `${b.branch} · ${b.commit ? b.commit.slice(0, 7) : 'no commit'} · ${ago(b.createdAt)} · ${state}`;
+  return `${b.branch} @ ${b.commit ? b.commit.slice(0, 7) : 'no commit'} · ${ago(b.createdAt)} · ${state}`;
 }
 
 export default function RemoteApp() {
@@ -53,7 +53,7 @@ export default function RemoteApp() {
   useEffect(() => {
     const onHash = () => {
       setView(viewFromHash());
-      setSelectedId(buildIdFromHash());
+      setSelectedId((cur) => buildIdFromHash() ?? cur);
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -71,30 +71,42 @@ export default function RemoteApp() {
   if (session === undefined) return <div className="empty"><h2>Loading…</h2></div>;
   if (!session || signingIn) return <Login onDone={(s) => { setSigningIn(false); setSession(s); }} onCancel={session ? () => setSigningIn(false) : null} />;
 
+  const can = session.can ?? [];
+  const tabs = [
+    { id: 'builds', label: 'Builds', hash: '#/builds', show: true },
+    { id: 'requests', label: 'Requests', hash: '#/requests', show: !session.readOnly },
+    { id: 'settings', label: 'Settings', hash: '#/settings', show: can.includes('manageUsers') },
+  ].filter((t) => t.show);
+
   const header = (
     <div className="remote-bar">
+      <nav className="nav" aria-label="Sections">
+        {tabs.map((t) => (
+          <a key={t.id} href={t.hash} className={`nav-tab ${view === t.id ? 'active' : ''}`} aria-current={view === t.id ? 'page' : undefined}>
+            {t.label}
+          </a>
+        ))}
+      </nav>
       {view === 'builds' && (
-        <>
+        <div className="build-pick">
           <select aria-label="Build" value={selectedId ?? ''} onChange={(e) => select(e.target.value)}>
             {!builds.some((b) => b.id === selectedId) && selectedId && <option value={selectedId}>{selectedId}</option>}
             {builds.map((b) => (
               <option key={b.id} value={b.id}>{buildLabel(b)}</option>
             ))}
           </select>
-          <button className="btn" onClick={loadBuilds} title="Refresh the build list">Refresh</button>
-        </>
+          <button className="btn btn-icon" onClick={loadBuilds} title="Refresh the build list" aria-label="Refresh the build list">↻</button>
+        </div>
       )}
-      {!session.readOnly && (
-        <button className={`btn ${view === 'requests' ? 'btn-primary' : ''}`} onClick={() => { window.location.hash = view === 'requests' ? '' : '#/requests'; }}>
-          {view === 'requests' ? 'Back to builds' : 'Requests'}
-        </button>
-      )}
-      {(session.can ?? []).includes('manageUsers') && (
-        <button className={`btn ${view === 'settings' ? 'btn-primary' : ''}`} onClick={() => { window.location.hash = view === 'settings' ? '' : '#/settings'; }}>
-          {view === 'settings' ? 'Back to builds' : 'Settings'}
-        </button>
-      )}
-      <span className="muted">{session.project} · {session.readOnly ? 'view only' : `${session.name}${session.role ? ` (${session.role})` : ''}`}</span>
+      <span className="spacer" />
+      <span className="user-chip" title={session.project}>
+        {session.readOnly ? 'View only' : (
+          <>
+            {session.name}
+            {session.role && <span className={`role-badge role-${session.role}`}>{session.role}</span>}
+          </>
+        )}
+      </span>
       {session.readOnly ? (
         <button className="btn btn-primary" onClick={() => setSigningIn(true)}>Sign in to review</button>
       ) : (
