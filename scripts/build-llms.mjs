@@ -6,7 +6,9 @@
 import fs from 'node:fs';
 
 const root = new URL('../', import.meta.url);
-const read = (f) => fs.readFileSync(new URL(f, root), 'utf8').trim();
+// Pictures and the demo block are for people reading on GitHub or npm; an AI tool gets only the text.
+const stripVisuals = (t) => t.replace(/<p align="center">[\s\S]*?<\/p>\n?/g, '').replace(/^!\[[^\]]*\]\([^)]*\)\n?/gm, '');
+const read = (f) => stripVisuals(fs.readFileSync(new URL(f, root), 'utf8')).trim();
 
 const out = `# Kitsune Review: full documentation
 
