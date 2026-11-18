@@ -134,32 +134,49 @@ export function createBranchBuilder(cfg, { cwd = process.cwd(), capture = captur
   const allowed = cfg.branches?.allowed;
   const fp = fingerprint(cfg);
 
-  const state = {
-    running: false,
-    phase: null,
-    done: 0,
-    total: 0,
-    log: [],
-    error: null,
-    compareId: null,
-    base: null,
-    head: null,
-    startedAt: null,
-    finishedAt: null,
+  // Several builds can run at once (branches.concurrency, default 2); the rest wait in a queue.
+  const concurrency = Math.min(Math.max(Number(cfg.branches?.concurrency) || 2, 1), 4);
+  const jobs = new Map(); // id -> job, oldest first
+  const inflight = new Map(); // commit -> promise, so two reviews that need the same commit build it once
+  let counter = 0;
+
+  const newJob = (base, head) => {
+    const job = {
+      id: `j${Date.now().toString(36)}${(counter++).toString(36)}`,
+      status: 'queued', // queued | running | done | failed
+      phase: 'Waiting for a free slot',
+      done: 0,
+      total: 0,
+      log: [],
+      error: null,
+      compareId: null,
+      base,
+      head,
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      finishedAt: null,
+    };
+    job.note = (line) => {
+      job.log.push(line);
+      if (job.log.length > 12) job.log.shift();
+    };
+    job.setPhase = (text) => {
+      job.phase = text;
+      job.done = 0;
+      job.total = 0;
+      job.note(text);
+    };
+    return job;
   };
-  const note = (line) => {
-    state.log.push(line);
-    if (state.log.length > 12) state.log.shift();
+  const view = (job) => {
+    const { note, setPhase, ...rest } = job;
+    return { ...rest, running: job.status === 'running' || job.status === 'queued', log: [...job.log] };
   };
-  const phase = (text) => {
-    state.phase = text;
-    state.done = 0;
-    state.total = 0;
-    note(text);
-  };
+  const active = () => [...jobs.values()].filter((j) => j.status === 'queued' || j.status === 'running');
 
   /** Screenshots of one commit, from the cache when this exact commit and config were captured before. */
-  async function shotsFor(sha, label, live) {
+  async function shotsFor(sha, label, live, job) {
+    const { note, setPhase: phase } = job;
     const dir = path.join(shotsRoot, `${sha.slice(0, 12)}-${fp}`);
     const metaFile = path.join(dir, 'meta.json');
     if (fs.existsSync(metaFile)) {
@@ -192,7 +209,7 @@ export function createBranchBuilder(cfg, { cwd = process.cwd(), capture = captur
       const store = { newFile: (key) => path.join(dir, `${key}.png`) };
       const { captured } = await capture(branchCfg, store, {
         log: note,
-        progress: (done, total) => Object.assign(state, { done, total }),
+        progress: (done, total) => Object.assign(job, { done, total }),
       });
       const entries = captured.map((r) => ({
         key: r.key,
@@ -273,19 +290,53 @@ export function createBranchBuilder(cfg, { cwd = process.cwd(), capture = captur
     return manifest;
   }
 
-  async function run(base, head) {
+  /** One commit's screenshots; when another review is already building the same commit, wait for that. */
+  function shots(sha, label, live, job) {
+    const key = sha.slice(0, 12);
+    if (inflight.has(key)) {
+      job.note(`${label}: ${short(sha)} is being built for another review, waiting for it`);
+      return inflight.get(key);
+    }
+    const promise = shotsFor(sha, label, live, job).finally(() => inflight.delete(key));
+    inflight.set(key, promise);
+    return promise;
+  }
+
+  async function run(job) {
+    const { base, head } = job;
     const root = await repoRoot(cwd);
     const real = fs.realpathSync(cwd);
     const live = { root, cwd: real, sub: path.relative(root, real) };
     const [baseSha, headSha] = await Promise.all([resolveCommit(base, { cwd, allowed }), resolveCommit(head, { cwd, allowed })]);
 
-    const baseShots = await shotsFor(baseSha, `Base (${base})`, live);
-    const headShots = await shotsFor(headSha, `Branch (${head})`, live);
+    const baseShots = await shots(baseSha, `Base (${base})`, live, job);
+    const headShots = await shots(headSha, `Branch (${head})`, live, job);
 
-    phase('Comparing screenshots');
+    job.setPhase('Comparing screenshots');
     const id = `${baseSha.slice(0, 12)}_${headSha.slice(0, 12)}_${fp}`;
     compareShots({ id, base, head, baseSha, headSha, baseShots, headShots });
-    state.compareId = id;
+    job.compareId = id;
+  }
+
+  function pump() {
+    for (const job of jobs.values()) {
+      if (job.status !== 'queued') continue;
+      if (active().filter((j) => j.status === 'running').length >= concurrency) return;
+      Object.assign(job, { status: 'running', startedAt: new Date().toISOString(), phase: 'Starting' });
+      run(job)
+        .then(() => {
+          job.status = 'done';
+        })
+        .catch((err) => {
+          job.status = 'failed';
+          job.error = err.message;
+        })
+        .finally(() => {
+          job.finishedAt = new Date().toISOString();
+          for (const id of [...jobs.keys()].slice(0, Math.max(0, jobs.size - 20))) if (jobs.get(id).status === 'done' || jobs.get(id).status === 'failed') jobs.delete(id);
+          pump();
+        });
+    }
   }
 
   const dirFor = (id) => {
@@ -296,18 +347,24 @@ export function createBranchBuilder(cfg, { cwd = process.cwd(), capture = captur
   };
 
   return {
-    snapshot: () => ({ ...state, log: [...state.log] }),
+    /** The newest build at the top level (what the Branches page shows), and every build in `jobs`. */
+    snapshot() {
+      const all = [...jobs.values()];
+      const latest = all[all.length - 1];
+      const empty = { id: null, status: 'idle', running: false, phase: null, done: 0, total: 0, log: [], error: null, compareId: null, base: null, head: null };
+      return { ...(latest ? view(latest) : empty), running: active().length > 0, jobs: all.map(view).reverse() };
+    },
 
+    /** Queue a build. Asking again for a pair that is already queued or running returns that build. */
     start(base, head) {
-      if (state.running) throw httpError(409, 'A branch build is already running');
       if (!base || !head) throw httpError(400, 'Provide base and head');
       if (base === head) throw httpError(400, 'Pick two different branches');
-      Object.assign(state, { running: true, phase: 'Starting', done: 0, total: 0, log: [], error: null, compareId: null, base, head, startedAt: new Date().toISOString(), finishedAt: null });
-      run(base, head)
-        .catch((err) => {
-          state.error = err.message;
-        })
-        .finally(() => Object.assign(state, { running: false, finishedAt: new Date().toISOString() }));
+      const existing = active().find((j) => j.base === base && j.head === head);
+      if (existing) return view(existing);
+      const job = newJob(base, head);
+      jobs.set(job.id, job);
+      pump();
+      return view(job);
     },
 
     /** The review manifest, with image URLs pointing at this comparison's own folder. */

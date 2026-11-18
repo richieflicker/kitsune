@@ -31,7 +31,7 @@ export default function Branches({ onBack, onReview }) {
   const [cmp, setCmp] = useState(null);
   const [comparing, setComparing] = useState(false);
   const [build, setBuild] = useState(null);
-  const watching = useRef(false); // true once this page started a build, so we only jump to the review for that one
+  const watching = useRef(null); // true once this page started a build, so we only jump to the review for that one
 
   const apply = useCallback((listing) => {
     setData(listing);
@@ -82,20 +82,23 @@ export default function Branches({ onBack, onReview }) {
     return () => clearInterval(timer);
   }, [build?.running]);
 
+  // Open the review of the build this page started, as soon as that one finishes (others keep running in the list).
   useEffect(() => {
-    if (build && !build.running && watching.current && build.compareId && !build.error) {
-      watching.current = false;
-      onReview(build.compareId);
+    const mine = watching.current && build?.jobs?.find((j) => j.id === watching.current);
+    if (mine && (mine.status === 'done' || mine.status === 'failed')) {
+      watching.current = null;
+      if (mine.status === 'done' && mine.compareId) onReview(mine.compareId);
     }
   }, [build, onReview]);
 
   async function doBuild() {
     setError(null);
     try {
-      watching.current = true;
-      setBuild(await startBranchBuild(base, head));
+      const started = await startBranchBuild(base, head);
+      watching.current = started.id;
+      setBuild(started);
     } catch (err) {
-      watching.current = false;
+      watching.current = null;
       setError(err.message);
     }
   }
@@ -198,38 +201,41 @@ export default function Branches({ onBack, onReview }) {
               <strong>Build and review screenshots</strong>
               <p className="muted">Builds Storybook for <code>{base}</code> and <code>{head}</code> in temporary worktrees (your folder is untouched), then shows what changed visually.</p>
             </div>
-            <button className="btn btn-primary" disabled={build?.running || !base || base === head} onClick={doBuild}>
-              {build?.running ? 'Building…' : 'Build & review'}
+            <button className="btn btn-primary" disabled={!base || base === head || build?.jobs?.some((j) => (j.status === 'running' || j.status === 'queued') && j.base === base && j.head === head)} onClick={doBuild}>
+              Build & review
             </button>
           </section>
         )}
 
-        {build?.running && (
-          <section className="br-card" aria-live="polite">
-            <strong>{build.phase}</strong>
-            {build.total > 0 && (
-              <div className="br-bar" role="progressbar" aria-valuemin={0} aria-valuemax={build.total} aria-valuenow={build.done}>
-                <div style={{ width: `${Math.round((build.done / build.total) * 100)}%` }} />
-              </div>
-            )}
-            <pre className="br-log">{build.log.slice(-6).join('\n')}</pre>
-          </section>
-        )}
-
-        {!build?.running && build?.error && (
-          <section className="br-card">
-            <strong className="status-error">The build failed</strong>
-            <pre className="br-log">{build.error}</pre>
-          </section>
-        )}
-
-        {!build?.running && build?.compareId && !build.error && (
-          <section className="br-card br-build">
-            <div>
-              <strong>Last build: {build.head} vs {build.base}</strong>
-              <p className="muted">Finished {ago(build.finishedAt)}.</p>
-            </div>
-            <button className="btn" onClick={() => onReview(build.compareId)}>Open review</button>
+        {build?.jobs?.length > 0 && (
+          <section className="br-card br-jobs" aria-live="polite">
+            <strong>Builds</strong>
+            <p className="muted">Up to two builds run at the same time; the rest wait. Open any finished one to review it.</p>
+            <ul>
+              {build.jobs.map((j) => (
+                <li key={j.id} className="br-job">
+                  <div className="br-job-head">
+                    <span><code>{j.head}</code> vs <code>{j.base}</code></span>
+                    <span className={`pill pill-${j.status === 'done' ? 'ok' : j.status === 'failed' ? 'bad' : j.status === 'running' ? 'info' : 'plain'}`}>
+                      {{ queued: 'Waiting', running: 'Building', done: 'Ready', failed: 'Failed' }[j.status]}
+                    </span>
+                    {j.status === 'done' && <button className="btn" onClick={() => onReview(j.compareId)}>Open review</button>}
+                  </div>
+                  {(j.status === 'running' || j.status === 'queued') && (
+                    <>
+                      <span className="muted">{j.phase}</span>
+                      {j.total > 0 && (
+                        <div className="br-bar" role="progressbar" aria-valuemin={0} aria-valuemax={j.total} aria-valuenow={j.done}>
+                          <div style={{ width: `${Math.round((j.done / j.total) * 100)}%` }} />
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {j.status === 'failed' && <pre className="br-log">{j.error}</pre>}
+                  {j.status === 'done' && j.finishedAt && <span className="muted">Finished {ago(j.finishedAt)}</span>}
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 

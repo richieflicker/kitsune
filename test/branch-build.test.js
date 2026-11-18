@@ -95,7 +95,9 @@ test('branch build: builds base and branch in worktrees, compares, reviews, and 
   try {
     const started = await post(url, '/api/branches/build', { base: 'main', head: 'feature/blue' });
     assert.equal(started.status, 202);
-    assert.equal((await post(url, '/api/branches/build', { base: 'main', head: 'feature/blue' })).status, 409);
+    // asking again for the same pair does not start a second build: it returns the one already running
+    const duplicate = await (await post(url, "/api/branches/build", { base: "main", head: "feature/blue" })).json();
+    assert.equal(duplicate.id, (await started.json()).id);
 
     const done = await waitDone(url);
     assert.equal(done.error, null, done.error);
@@ -227,5 +229,52 @@ test('pr-link: only after everything is approved, only to listed branches, never
     assert.match((await res.json()).error, /local branch/);
   } finally {
     second.server.close();
+  }
+});
+
+test('several builds at once: up to the limit run together, the rest wait, and a shared commit is built once', async () => {
+  const cwd = project('ff0000');
+  for (const [name, color] of [['feature/blue', '0000ff'], ['feature/green', '00ff00'], ['feature/pink', 'ff00ff']]) {
+    git(cwd, 'checkout', '-q', '-b', name, 'main');
+    fs.writeFileSync(path.join(cwd, 'sb', 'color.txt'), color);
+    git(cwd, 'commit', '-qam', name);
+  }
+  git(cwd, 'checkout', '-q', 'main');
+
+  let running = 0;
+  let peak = 0;
+  const seen = [];
+  const slow = async (cfg, store, opts) => {
+    running++;
+    peak = Math.max(peak, running);
+    await new Promise((r) => setTimeout(r, 150));
+    try {
+      return await fakeCapture(seen)(cfg, store, opts);
+    } finally {
+      running--;
+    }
+  };
+  const { url, server } = await startServer(config({ concurrency: 2 }), { port: 0, cwd, capture: slow });
+  try {
+    for (const head of ['feature/blue', 'feature/green', 'feature/pink']) assert.equal((await post(url, '/api/branches/build', { base: 'main', head })).status, 202);
+    const early = await (await fetch(`${url}/api/branches/build`)).json();
+    assert.equal(early.jobs.length, 3);
+
+    const done = await waitDone(url);
+    assert.ok(peak >= 2, `two builds should overlap (peak ${peak})`);
+    assert.ok(peak <= 2, `never more than the limit (peak ${peak})`);
+    assert.equal(done.jobs.length, 3);
+    assert.ok(done.jobs.every((j) => j.status === 'done' && j.compareId), JSON.stringify(done.jobs.map((j) => [j.head, j.status, j.error])));
+    assert.equal(new Set(done.jobs.map((j) => j.compareId)).size, 3); // each has its own review
+    // main was needed by all three but captured once, plus one capture per branch
+    assert.equal(seen.filter((s) => s.color === 'ff0000').length, 1);
+    assert.equal(seen.length, 4);
+
+    for (const j of done.jobs) {
+      const manifest = await (await fetch(`${url}/api/branch-review?id=${j.compareId}`)).json();
+      assert.equal(manifest.summary.changed, 1);
+    }
+  } finally {
+    await new Promise((r) => server.close(r));
   }
 });
