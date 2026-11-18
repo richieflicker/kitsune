@@ -7,7 +7,8 @@
 // Storybook 8 imports: '@storybook/manager-api'.
 // Storybook 9+ moved this to:  import { addons, types } from 'storybook/manager-api';
 import React from 'react';
-import { addons, types } from '@storybook/manager-api';
+import { addons, types, useStorybookState } from '@storybook/manager-api';
+import { createImpactPanel } from './impact-panel.mjs';
 
 const ADDON_ID = 'kitsune-review';
 // The sign-in cookie is SameSite=Strict, so the dashboard must be on the same *site* as Storybook. The browser
@@ -24,7 +25,16 @@ function sameSiteUrl(url) {
 }
 const DASHBOARD_URL = sameSiteUrl((typeof window !== 'undefined' && window.KITSUNE_URL) || 'http://127.0.0.1:4455');
 
-addons.register(ADDON_ID, () => {
+addons.register(ADDON_ID, (storybookApi) => {
+  const openTab = () => storybookApi.applyQueryParams({ tab: `${ADDON_ID}/tab` });
+  // Bottom panel next to Controls / Actions: how much did this story change against its baseline?
+  addons.add(`${ADDON_ID}/panel`, {
+    type: types.PANEL,
+    title: 'Visual changes',
+    match: ({ viewMode }) => viewMode === 'story',
+    render: createImpactPanel({ React, useStorybookState, base: DASHBOARD_URL, openTab }),
+  });
+
   addons.add(`${ADDON_ID}/tab`, {
     type: types.TAB,
     title: 'Kitsune',

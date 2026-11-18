@@ -75,3 +75,26 @@ export function impactLevel({ diffPixels, diffRatio, bboxRatio, regions, sizeCha
   if (diffRatio >= t.minor || regions >= t.regionsModerate) return 'moderate';
   return 'minor';
 }
+
+const RANK = { none: 0, new: 1, minor: 2, unknown: 2, moderate: 3, major: 4 };
+
+/** What the Storybook panel shows for one story: every viewport/browser result plus the worst impact. */
+export function impactForStory(manifest, storyId) {
+  const items = (manifest?.stories ?? []).filter((s) => s.id === storyId);
+  const results = items.map((s) => ({
+    key: s.key,
+    viewport: s.viewport,
+    browser: s.browser,
+    status: s.status,
+    impact: s.status === 'new' ? 'new' : s.impact ?? (s.status === 'changed' ? 'unknown' : 'none'),
+    diffRatio: s.diffRatio ?? 0,
+    bboxRatio: s.bboxRatio ?? 0,
+    regions: s.regions ?? 0,
+    sizeChanged: Boolean(s.sizeChanged),
+    baselineImage: s.baselineImage ?? null,
+    newImage: s.newImage ?? null,
+    diffImage: s.diffImage ?? null,
+  }));
+  const worst = results.reduce((w, r) => ((RANK[r.impact] ?? 0) > (RANK[w] ?? 0) ? r.impact : w), 'none');
+  return { buildId: manifest?.buildId ?? null, found: results.length > 0, worst: results.length ? worst : null, results };
+}
