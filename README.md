@@ -321,8 +321,40 @@ changes another branch. When a build on the default branch contains pixels alrea
 Put Nginx or Caddy in front for TLS. The review cookie is HttpOnly and SameSite=Strict; the dashboard's write calls also
 require an `X-Requested-With` header. Login is limited to 10 failures per 15 minutes per IP.
 
+### Teams, roles and review requests
+
+Each person gets a personal token and one of four roles (`kitsune server add-user <project> "Name" --role <role>`, or
+the **Users** page in the dashboard):
+
+| Role | Can |
+|---|---|
+| `viewer` | look at builds |
+| `contributor` | look, and send review requests; sees only their own requests |
+| `reviewer` | also approve, reject or ask for changes |
+| `admin` | everything, including Users and Settings |
+
+A contributor sends a **review request** (branch, exact commit, title). It moves `open` → `building` → `in_review` →
+`approved` → `pr_created` → `published`, or is `rejected` / sent back for `changes_requested` (a reason is required;
+only the requester resubmits). Every step is checked against the person's role and kept in an append-only history.
+Builds happen on an admin's own machine for now: build the branch, upload it, then mark the request built. Contributors
+see where their request stands and can open its build read-only.
+
+**Pages.** After sign-in admins land on **Overview** (what needs action, who is on the team, recent activity),
+reviewers and contributors on **Requests**, viewers on **Builds**. Admins also get **Users** and **Settings**.
+
+**Impact.** Every changed story gets a Minor / Moderate / Major level, shown as a badge in the review list (sort by
+biggest change first) and in the Storybook **Visual changes** panel. Tune it with the `impact` key (see COMMANDS).
+
+**Zoho Cliq alerts.** Admins paste a Cliq incoming-webhook address under **Settings** and choose which events post
+(submitted, ready to review, approved, changes requested, rejected, resubmitted, PR created, published).
+
+**Publishing.** `kitsune publish` rehearses a publish to Verdaccio (or npm) and, with `--yes`, really publishes. It
+refuses a dirty tree, a version the registry already has, or a missing login; with `--request <id> --server <url>` it
+only publishes an approved request on the approved commit.
+
 **Limits of this version.**
-- One shared review token per project, no user accounts or SSO. The name typed at sign-in is recorded with approvals but is not verified.
+- Personal tokens and roles, but no SSO. A shared review token (if you keep it) records the name typed at sign-in without verifying it.
+- Builds for review requests run on an admin's machine, not on the server; Bitbucket has no commit-status integration yet (GitHub only).
 - No "un-approve". A wrong approval is fixed by approving the right pixels again.
 - A stale approval on an old branch can win over a later change on the default branch for that branch only.
 - SQLite plus local disk means a single server. The storage code is isolated (`src/server/db.js` holds all SQL, image reads and writes go through one service) so Postgres/Mongo, S3, or a NestJS wrapper can be swapped in later.

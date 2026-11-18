@@ -10,6 +10,7 @@
 - **Impact scoring on the shared server.** Every changed snapshot gets a Minor / Moderate / Major level (same rules as local `kitsune check`), stored with the build. Existing databases are upgraded automatically; builds made before this keep an estimated badge.
 - **Impact badges and sort** in the review list, and a top bar with role-aware tabs and a name + role badge.
 - **Parallel branch builds**: start several Build & review runs and they queue, with up to `branches.concurrency` (default 2, max 4) running together. Each build has its own review. Asking for a pair that is already queued or running returns that build, and two builds that need the same commit build it once. The Branches page lists every build with its state.
+- **Docs refreshed** (README, COMMANDS, `llms.txt`, `llms-full.txt`): roles and review requests, dashboard pages, impact scoring and its config, Cliq alerts, `kitsune publish`, new environment variables.
 
 ## 0.4.0
 

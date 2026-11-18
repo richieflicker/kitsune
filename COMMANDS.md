@@ -248,6 +248,23 @@ ui: {
 ```
 With the shared server, set `ui` in the server settings file instead (below).
 
+### Impact scoring (`impact`)
+
+Every compared story gets an impact level: `none`, `minor`, `moderate` or `major` (a page that changed size is always
+`major`). Defaults, all optional in `kitsune.config.js`:
+
+```js
+impact: {
+  minor: 0.005,        // share of changed pixels where a change counts as moderate and up
+  major: 0.05,         // share of changed pixels above which it is major
+  bboxMajor: 0.4,      // share of the page the changes span above which it is major
+  regionsModerate: 4,  // separate changed areas that make it moderate
+  regionsMajor: 12,    // separate changed areas that make it major
+}
+```
+The shared server uses these defaults for every project. The local server returns the level for one story at
+`GET /api/impact?story=<id>` (used by the Storybook "Visual changes" panel).
+
 ## Server settings file (`kitsune.server.json`)
 
 Put it in the folder you start the server from (or pass `--server-config <file>`). Secrets are never read from it:
@@ -298,8 +315,23 @@ A misspelled or invalid setting stops the server from starting with a message th
 | `KITSUNE_PUBLIC_URL` | server | Public address (see `publicUrl`). |
 | `KITSUNE_GITHUB_TOKEN` | server | Token allowed to write commit statuses (never in a file). |
 | `KITSUNE_GITHUB_API_URL` | server | GitHub API address. |
+| `KITSUNE_CLIQ_WEBHOOK` | server | Zoho Cliq incoming-webhook address for request alerts (admins can also set it under Settings; the setting wins). https Zoho hosts only. |
+| `KITSUNE_PUBLISH_TOKEN` | publish | Registry token for `kitsune publish`; written to a temporary file that is deleted afterwards, never stored. |
+| `KITSUNE_REVIEW_TOKEN` | publish `--request` | An admin's personal token, so publish can check and close a review request. |
 | `KITSUNE_TRUST_PROXY=1` | server | Read client IP from `X-Forwarded-For` (only behind your own reverse proxy). |
 | `KITSUNE_TAB=1` | Storybook | Show the Kitsune tab inside Storybook (when your `main.js` opts in). |
+
+## Dashboard pages and API (shared server)
+
+| Page | Who sees it | What it does |
+|---|---|---|
+| Overview | admin (their home page) | Requests needing action, builds with changes waiting, people by role, Cliq on/off, pipeline, activity. `GET /api/v1/overview`. |
+| Builds | everyone | Review a build: impact badge per story, sort by biggest change, approve / reject (reviewer and admin only). |
+| Requests | contributor, reviewer, admin | Contributors submit and track; reviewers and admins work the queue. A request shows "See the changes" for the build of its commit. |
+| Users | admin | Add a person with a role (token shown once), change role, remove. `GET/POST /api/v1/users`, `PUT /api/v1/users/:name/role`, `DELETE /api/v1/users/:name`. |
+| Settings | admin | Zoho Cliq alerts: webhook address, which events, test message. `GET/PUT /api/v1/settings/cliq`, `POST /api/v1/settings/cliq/test`. |
+
+With no page in the address, viewers open on Builds, contributors and reviewers on Requests, admins on Overview.
 
 ## Troubleshooting
 
