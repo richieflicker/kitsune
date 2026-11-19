@@ -11,7 +11,7 @@ const STATE_LABEL = {
 };
 const FLOW = ['open', 'building', 'in_review', 'approved', 'pr_created', 'published'];
 const EVENT = {
-  submitted: 'submitted', build: 'started the build for', built: 'finished the build for', approve: 'approved',
+  submitted: 'submitted', build: 'started the build for', built: 'finished the build for', buildFailed: 'reported a failed build for', approve: 'approved',
   requestChanges: 'asked for changes on', reject: 'rejected', resubmit: 'resubmitted', pr: 'created the PR for', publish: 'published',
 };
 

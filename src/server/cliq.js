@@ -4,7 +4,7 @@
 // Zoho Cliq alerts: post a short message to a Cliq channel through its incoming webhook URL
 // (https://cliq.zoho.com/api/v2/channelsbyname/<channel>/message?zapikey=<token>, or the .in / .eu / ... twin).
 
-export const EVENTS = ['submitted', 'built', 'approve', 'requestChanges', 'reject', 'resubmit', 'pr', 'publish'];
+export const EVENTS = ['submitted', 'built', 'buildFailed', 'approve', 'requestChanges', 'reject', 'resubmit', 'pr', 'publish'];
 
 // Only Zoho's own hosts. The server makes this request on an admin's behalf, so it must not be pointable at an
 // internal address or an arbitrary site.
@@ -38,6 +38,7 @@ export function maskWebhookUrl(raw) {
 const LINES = {
   submitted: (r, by) => `🦊 *New review request* from ${by}: "${r.title}" (${r.source} → ${r.target})`,
   built: (r, by) => `🔎 *Ready to review*: "${r.title}" has been built by ${by}`,
+  buildFailed: (r) => `🛠️ *Build failed* for "${r.title}"${r.reason ? `: ${r.reason}` : ''}`,
   approve: (r, by) => `✅ *Approved* by ${by}: "${r.title}"`,
   requestChanges: (r, by) => `✏️ *Changes requested* by ${by} on "${r.title}"${r.reason ? `: ${r.reason}` : ''}`,
   reject: (r, by) => `⛔ *Rejected* by ${by}: "${r.title}"${r.reason ? `: ${r.reason}` : ''}`,

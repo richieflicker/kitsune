@@ -19,6 +19,8 @@ export async function openRemote(server, token, fetchImpl = fetch) {
   };
   return {
     getRequest: (id) => call('GET', `/api/v1/requests/${encodeURIComponent(id)}`),
+    listRequests: (limit = 100) => call('GET', `/api/v1/requests?limit=${limit}`).then((d) => d.requests ?? []),
+    move: (id, action, body = {}) => call('POST', `/api/v1/requests/${encodeURIComponent(id)}/${action}`, body),
     markPublished: (id) => call('POST', `/api/v1/requests/${encodeURIComponent(id)}/publish`, {}),
   };
 }
