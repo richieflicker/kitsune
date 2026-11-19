@@ -65,7 +65,7 @@ test('requests send alerts to the saved webhook, for the chosen events only', as
   const { id } = svc.createRequest(project, dev, { source: 'b', title: 'T', sha: SHA });
   svc.moveRequest(project, admin, id, 'build'); // not selected, and not an alert event anyway
   svc.moveRequest(project, admin, id, 'built'); // not selected
-  svc.moveRequest(project, admin, id, 'approve');
+  svc.moveRequest(project, { name: 'Rev', role: 'reviewer' }, id, 'approve'); // a second person approves
   await settle();
   assert.equal(calls.length, 2);
   assert.match(calls[0], /New review request/);

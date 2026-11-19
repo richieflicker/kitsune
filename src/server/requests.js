@@ -20,11 +20,15 @@ export const ACTIONS = {
 };
 
 /** Why this action is not allowed right now, or null when it is. Pure, so it is easy to test. */
-export function refusal(request, action, { can, name }) {
+export function refusal(request, action, { can, name, involved = [], allowSelfApproval = false }) {
   const rule = ACTIONS[action];
   if (!rule) return { status: 404, message: `Unknown action "${action}"` };
   if (!can(rule.needs)) return { status: 403, message: 'Your role cannot do that' };
   if (rule.owner && request.requester !== name) return { status: 403, message: 'Only the person who made the request can do that' };
+  // Four eyes: whoever sent or built a request cannot be the one who approves it.
+  if (action === 'approve' && !allowSelfApproval && involved.includes(name)) {
+    return { status: 403, message: 'You sent or built this request, so someone else has to approve it' };
+  }
   if (!rule.from.includes(request.state)) return { status: 409, message: `A request that is "${request.state}" cannot be moved with "${action}"` };
   return null;
 }

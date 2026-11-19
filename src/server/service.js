@@ -76,6 +76,8 @@ const describeRequest = (r) => ({
 
 export function createService({ db, dataDir, storage = createFsStorage({ dataDir }), env = process.env, sessionDays = SESSION_DAYS, fetchImpl = fetch }) {
   const publicUrl = (env.KITSUNE_PUBLIC_URL || '').replace(/\/$/, '');
+  // One-person teams can switch the four-eyes rule off: KITSUNE_ALLOW_SELF_APPROVAL=1.
+  const allowSelfApproval = env.KITSUNE_ALLOW_SELF_APPROVAL === '1';
   const { imagePath, diffPath } = storage;
 
   // ---- GitHub status (posted by the server, so approving in the dashboard updates the PR live) ----
@@ -352,17 +354,29 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       };
     },
 
+    // People who sent or built a request: the four-eyes rule keeps them from approving it.
+    involvedIn(row, events) {
+      return [...new Set([row.requester, ...events.filter((e) => e.kind === 'build' || e.kind === 'built').map((e) => e.actor)])];
+    },
+
     getRequest(project, session, id) {
       const row = db.requestById(project.id, id);
       if (!row || (session.role === 'contributor' && row.requester !== session.name)) throw new HttpError(404, 'No such request');
-      return { ...describeRequest(row), events: db.eventsFor(id) };
+      const events = db.eventsFor(id);
+      const mustNotApprove = !allowSelfApproval && this.involvedIn(row, events).includes(session.name);
+      return { ...describeRequest(row), events, blockedActions: mustNotApprove ? ['approve'] : [] };
     },
 
     /** Move a request along: build, built, approve, requestChanges, reject, resubmit, pr, publish. */
     moveRequest(project, session, id, action, input = {}) {
       const row = db.requestById(project.id, id);
       if (!row || (session.role === 'contributor' && row.requester !== session.name)) throw new HttpError(404, 'No such request');
-      const refused = refusal(row, action, { can: (a) => roleCan(session.role, a), name: session.name });
+      const refused = refusal(row, action, {
+        can: (a) => roleCan(session.role, a),
+        name: session.name,
+        involved: action === 'approve' ? this.involvedIn(row, db.eventsFor(id)) : [],
+        allowSelfApproval,
+      });
       if (refused) throw new HttpError(refused.status, refused.message);
       const rule = REQUEST_ACTIONS[action];
       const reason = input.reason == null || input.reason === '' ? null : cleanText(input.reason, 500, 'reason');

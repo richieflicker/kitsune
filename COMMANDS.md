@@ -315,6 +315,7 @@ A misspelled or invalid setting stops the server from starting with a message th
 | `KITSUNE_PUBLIC_URL` | server | Public address (see `publicUrl`). |
 | `KITSUNE_GITHUB_TOKEN` | server | Token allowed to write commit statuses (never in a file). |
 | `KITSUNE_GITHUB_API_URL` | server | GitHub API address. |
+| `KITSUNE_ALLOW_SELF_APPROVAL=1` | server | Turn off the four-eyes rule (the person who sent or built a request cannot approve it). For one-person teams. |
 | `KITSUNE_CLIQ_WEBHOOK` | server | Zoho Cliq incoming-webhook address for request alerts (admins can also set it under Settings; the setting wins). https Zoho hosts only. |
 | `KITSUNE_PUBLISH_TOKEN` | publish | Registry token for `kitsune publish`; written to a temporary file that is deleted afterwards, never stored. |
 | `KITSUNE_REVIEW_TOKEN` | publish `--request` | An admin's personal token, so publish can check and close a review request. |

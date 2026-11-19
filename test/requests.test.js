@@ -26,8 +26,9 @@ test('contributor submits, admin builds, reviews, approves, opens the PR and pub
   assert.equal(made.state, 'open');
   assert.equal(made.target, 'main'); // defaults to the project's default branch
 
-  for (const [action, state] of [['build', 'building'], ['built', 'in_review'], ['approve', 'approved'], ['pr', 'pr_created'], ['publish', 'published']]) {
-    assert.equal(svc.moveRequest(project, admin, made.id, action).state, state);
+  const reviewer = as('Rev', 'reviewer');
+  for (const [who, action, state] of [[admin, 'build', 'building'], [admin, 'built', 'in_review'], [reviewer, 'approve', 'approved'], [admin, 'pr', 'pr_created'], [admin, 'publish', 'published']]) {
+    assert.equal(svc.moveRequest(project, who, made.id, action).state, state);
   }
   const trail = svc.getRequest(project, admin, made.id).events.map((e) => e.kind);
   assert.deepEqual(trail, ['submitted', 'build', 'built', 'approve', 'pr', 'publish']);
@@ -83,4 +84,47 @@ test('input is validated', async () => {
   assert.throws(() => svc.createRequest(project, dev, { source: 'b', title: 't', sha: 'nope' }), /sha must be/);
   assert.throws(() => svc.createRequest(project, dev, { source: '', title: 't', sha: SHA }), /source branch/);
   assert.throws(() => svc.createRequest(project, dev, { source: 'b', title: 'x'.repeat(200), sha: SHA }), /title/);
+});
+
+test('four eyes: whoever sent or built a request cannot approve it', async () => {
+  const { svc, project, as } = await setup();
+  const admin = as('Root', 'admin');
+  const admin2 = as('Second', 'admin');
+  const reviewer = as('Rev', 'reviewer');
+
+  // An admin who builds it cannot approve it, but another admin or a reviewer can.
+  const a = svc.createRequest(project, as('Dev', 'contributor'), { source: 'f/a', title: 'A', sha: SHA });
+  svc.moveRequest(project, admin, a.id, 'build');
+  svc.moveRequest(project, admin, a.id, 'built');
+  assert.deepEqual(svc.getRequest(project, admin, a.id).blockedActions, ['approve']);
+  assert.deepEqual(svc.getRequest(project, admin2, a.id).blockedActions, []);
+  assert.throws(() => svc.moveRequest(project, admin, a.id, 'approve'), (e) => e.status === 403 && /someone else/.test(e.message));
+  assert.equal(svc.getRequest(project, admin, a.id).state, 'in_review'); // nothing changed
+  assert.equal(svc.moveRequest(project, admin2, a.id, 'approve').state, 'approved');
+
+  // An admin who sent the request cannot approve it either.
+  const b = svc.createRequest(project, admin, { source: 'f/b', title: 'B', sha: SHA });
+  svc.moveRequest(project, admin2, b.id, 'build');
+  svc.moveRequest(project, admin2, b.id, 'built');
+  assert.throws(() => svc.moveRequest(project, admin, b.id, 'approve'), (e) => e.status === 403);
+  assert.equal(svc.moveRequest(project, reviewer, b.id, 'approve').state, 'approved');
+
+  // Asking for changes or rejecting is still allowed for them: only approval needs a second person.
+  const c = svc.createRequest(project, admin, { source: 'f/c', title: 'C', sha: SHA });
+  svc.moveRequest(project, admin, c.id, 'build');
+  svc.moveRequest(project, admin, c.id, 'built');
+  assert.equal(svc.moveRequest(project, admin, c.id, 'reject', { reason: 'withdrawn' }).state, 'rejected');
+});
+
+test('four eyes can be switched off for a one-person team', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-req-solo-'));
+  const db = await openDb(dir);
+  const svc = createService({ db, dataDir: dir, env: { KITSUNE_ALLOW_SELF_APPROVAL: '1' } });
+  const { project } = svc.createProject({ name: 'p' });
+  const solo = { name: 'Solo', role: 'admin' };
+  const r = svc.createRequest(project, solo, { source: 'f/x', title: 'X', sha: SHA });
+  svc.moveRequest(project, solo, r.id, 'build');
+  svc.moveRequest(project, solo, r.id, 'built');
+  assert.deepEqual(svc.getRequest(project, solo, r.id).blockedActions, []);
+  assert.equal(svc.moveRequest(project, solo, r.id, 'approve').state, 'approved');
 });
