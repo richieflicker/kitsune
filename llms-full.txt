@@ -336,7 +336,8 @@ changes another branch. When a build on the default branch contains pixels alrea
 | `KITSUNE_PUBLIC_URL` | links in PR statuses point here |
 | `KITSUNE_GITHUB_TOKEN` | token that may write commit statuses on the repo |
 | `KITSUNE_TRUST_PROXY=1` | read the client IP from `X-Forwarded-For` (set only behind your reverse proxy) |
-| `KITSUNE_URL`, `KITSUNE_UPLOAD_TOKEN` | used by `kitsune check --remote` in CI |
+| `KITSUNE_URL`, `KITSUNE_UPLOAD_TOKEN` | used by `kitsune check --remote` in CI and by `kitsune worker` |
+| `KITSUNE_REVIEW_TOKEN` | an admin's personal token, used by `kitsune worker` and `kitsune publish --request` |
 
 Put Nginx or Caddy in front for TLS. The review cookie is HttpOnly and SameSite=Strict; the dashboard's write calls also
 require an `X-Requested-With` header. Login is limited to 10 failures per 15 minutes per IP.
@@ -396,6 +397,11 @@ biggest change first) and in the Storybook **Visual changes** panel. Tune it wit
 
 **Zoho Cliq alerts.** Admins paste a Cliq incoming-webhook address under **Settings** and choose which events post
 (submitted, ready to review, approved, changes requested, rejected, resubmitted, PR created, published).
+
+**Automatic builds.** The shared server only stores builds; building Storybook needs your code. Run
+`kitsune worker --server https://kitsune.example.com` in a clone of the repository (on a build machine, with
+`KITSUNE_REVIEW_TOKEN` and `KITSUNE_UPLOAD_TOKEN` set). It picks up every new review request, fetches the branch,
+builds, checks, uploads and hands the request to reviewers. No one has to run `kitsune check` by hand.
 
 **Publishing.** `kitsune publish` rehearses a publish to Verdaccio (or npm) and, with `--yes`, really publishes. It
 refuses a dirty tree, a version the registry already has, or a missing login; with `--request <id> --server <url>` it
@@ -467,6 +473,7 @@ build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  
 |---|---|
 | `kitsune init [--no-scripts] [--no-storybook]` | Creates a starter `kitsune.config.js`, adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to `package.json` (existing scripts are never overwritten) and adds the `kitsune-review` addon to `.storybook/main.*` when it is a plain `addons: [ ... ]` array (otherwise it prints the line). Safe to run again. |
 | `kitsune browsers [names...]` | Installs Playwright browsers using the Playwright that Kitsune itself uses. Default: `firefox webkit`. |
+| `kitsune worker --server <url> [--once] [--interval 30]` | Run in a clone of your repository. Picks up review requests in the **open** state, fetches the branch from `origin`, builds Storybook in a temporary worktree, runs the check, uploads it and moves the request to **in review**; a failed build sends it back to the contributor with the reason. Needs `KITSUNE_REVIEW_TOKEN` (an admin's personal token) and `KITSUNE_UPLOAD_TOKEN`. |
 | `kitsune publish [--registry <url>] [--tag next] [--yes] [--request <id> --server <url>]` | Publishes this package to Verdaccio (or npm). **Rehearses by default** (`npm publish --dry-run`); add `--yes` to really publish. Refuses unless the tree is clean, the version is free on the registry and you are signed in (`npm adduser --registry <url>`, or put your token in `KITSUNE_PUBLISH_TOKEN`; it is written to a temporary file that is deleted afterwards). With `--request`, it also checks the request is approved, that you are on the approved commit, and marks it published (needs `KITSUNE_REVIEW_TOKEN`, an admin's personal token). |
 | `kitsune check` | Captures every story, compares with baselines, prints a summary. **Exits with code 1 if anything needs review**, which is what makes CI fail. |
 | `kitsune serve` | Opens the review dashboard (default http://127.0.0.1:4455): before/after, slider, diff, approve/reject. |

@@ -11,6 +11,8 @@ export const STATES = ['open', 'building', 'in_review', 'approved', 'pr_created'
 export const ACTIONS = {
   build: { from: ['open'], to: 'building', needs: 'build' },
   built: { from: ['building'], to: 'in_review', needs: 'build' },
+  // The worker could not build it. The contributor sees the reason and can fix and resubmit.
+  buildFailed: { from: ['building'], to: 'changes_requested', needs: 'build', reason: true },
   approve: { from: ['in_review'], to: 'approved', needs: 'review' },
   requestChanges: { from: ['in_review'], to: 'changes_requested', needs: 'review', reason: true },
   reject: { from: ['open', 'building', 'in_review', 'changes_requested'], to: 'rejected', needs: 'review', reason: true },

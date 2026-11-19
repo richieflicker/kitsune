@@ -34,6 +34,17 @@ test('contributor submits, admin builds, reviews, approves, opens the PR and pub
   assert.deepEqual(trail, ['submitted', 'build', 'built', 'approve', 'pr', 'publish']);
 });
 
+test('a failed build goes back to the contributor with a reason', async () => {
+  const { svc, project, as } = await setup();
+  const { id } = svc.createRequest(project, as('Dev', 'contributor'), { source: 'b', title: 't', sha: SHA });
+  const admin = as('Root', 'admin');
+  svc.moveRequest(project, admin, id, 'build');
+  assert.throws(() => svc.moveRequest(project, admin, id, 'buildFailed'), /reason/i);
+  const moved = svc.moveRequest(project, admin, id, 'buildFailed', { reason: 'vite failed' });
+  assert.equal(moved.state, 'changes_requested');
+  assert.equal(moved.reason, 'vite failed');
+});
+
 test('who may do what', async () => {
   const { svc, project, as } = await setup();
   const dev = as('Dev', 'contributor');

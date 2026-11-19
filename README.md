@@ -335,7 +335,8 @@ changes another branch. When a build on the default branch contains pixels alrea
 | `KITSUNE_PUBLIC_URL` | links in PR statuses point here |
 | `KITSUNE_GITHUB_TOKEN` | token that may write commit statuses on the repo |
 | `KITSUNE_TRUST_PROXY=1` | read the client IP from `X-Forwarded-For` (set only behind your reverse proxy) |
-| `KITSUNE_URL`, `KITSUNE_UPLOAD_TOKEN` | used by `kitsune check --remote` in CI |
+| `KITSUNE_URL`, `KITSUNE_UPLOAD_TOKEN` | used by `kitsune check --remote` in CI and by `kitsune worker` |
+| `KITSUNE_REVIEW_TOKEN` | an admin's personal token, used by `kitsune worker` and `kitsune publish --request` |
 
 Put Nginx or Caddy in front for TLS. The review cookie is HttpOnly and SameSite=Strict; the dashboard's write calls also
 require an `X-Requested-With` header. Login is limited to 10 failures per 15 minutes per IP.
@@ -403,6 +404,11 @@ biggest change first) and in the Storybook **Visual changes** panel. Tune it wit
 
 **Zoho Cliq alerts.** Admins paste a Cliq incoming-webhook address under **Settings** and choose which events post
 (submitted, ready to review, approved, changes requested, rejected, resubmitted, PR created, published).
+
+**Automatic builds.** The shared server only stores builds; building Storybook needs your code. Run
+`kitsune worker --server https://kitsune.example.com` in a clone of the repository (on a build machine, with
+`KITSUNE_REVIEW_TOKEN` and `KITSUNE_UPLOAD_TOKEN` set). It picks up every new review request, fetches the branch,
+builds, checks, uploads and hands the request to reviewers. No one has to run `kitsune check` by hand.
 
 **Publishing.** `kitsune publish` rehearses a publish to Verdaccio (or npm) and, with `--yes`, really publishes. It
 refuses a dirty tree, a version the registry already has, or a missing login; with `--request <id> --server <url>` it
