@@ -403,6 +403,21 @@ biggest change first) and in the Storybook **Visual changes** panel. Tune it wit
 `KITSUNE_REVIEW_TOKEN` and `KITSUNE_UPLOAD_TOKEN` set). It picks up every new review request, fetches the branch,
 builds, checks, uploads and hands the request to reviewers. No one has to run `kitsune check` by hand.
 
+**Picking a branch.** The worker also reports the branches on your remote (it uses the git access that machine
+already has, so Kitsune needs no Bitbucket or GitHub token). The *New request* form therefore offers **Your branch**
+and **Merge into** as dropdowns, shows the newest commit of the branch (and how many commits it is ahead of the
+default branch), and has a **Fetch** button that makes the worker run `git fetch` and refresh the list within a few
+seconds. Every commit on the branch that is not in the target is part of the review. Resubmitting uses the branch's
+newest commit automatically, and the request records the exact commit the worker built.
+
+
+**Create pull request.** Once a request is approved it shows a **Create pull request** button that opens your host
+(Bitbucket Server / Data Center, Bitbucket Cloud, GitHub, GitLab) with source and target already filled in; you press
+Create there. No token is needed. The address comes from the worker's `origin`; if your web address differs from your
+git address, or the host is unknown, set `branches.prUrl` in `kitsune.config.js`, e.g.
+`https://git.example.com/projects/P/repos/r/pull-requests?create&sourceBranch=refs/heads/{source}&targetBranch=refs/heads/{target}`.
+
+
 **Build report.** The request page shows the run while it happens and after: each step (Fetch, Checkout, Install,
 Build Storybook, then Capture and Upload) with its time, a progress bar while screenshots are taken, and a summary
 (for example *1 story × 2 viewports × 1 browser = 2 screenshots checked*, with unchanged / new / changed / could not
@@ -482,7 +497,7 @@ build-storybook  →  kitsune check  →  kitsune serve (review)  →  approve  
 |---|---|
 | `kitsune init [--no-scripts] [--no-storybook]` | Creates a starter `kitsune.config.js`, adds `kitsune:check`, `kitsune:serve` and `kitsune:browsers` scripts to `package.json` (existing scripts are never overwritten) and adds the `kitsune-review` addon to `.storybook/main.*` when it is a plain `addons: [ ... ]` array (otherwise it prints the line). Safe to run again. |
 | `kitsune browsers [names...]` | Installs Playwright browsers using the Playwright that Kitsune itself uses. Default: `firefox webkit`. |
-| `kitsune worker --server <url> [--once] [--interval 30]` | Run in a clone of your repository. Picks up review requests in the **open** state, fetches the branch from `origin`, builds Storybook in a temporary worktree, runs the check, uploads it and moves the request to **in review**; a failed build sends it back to the contributor with the reason. Needs `KITSUNE_REVIEW_TOKEN` (an admin's personal token) and `KITSUNE_UPLOAD_TOKEN`. |
+| `kitsune worker --server <url> [--once] [--interval 10]` | Run in a clone of your repository. Picks up review requests in the **open** state, fetches the branch from `origin`, builds Storybook in a temporary worktree, runs the check, uploads it and moves the request to **in review**; a failed build sends it back to the contributor with the reason. Needs `KITSUNE_REVIEW_TOKEN` (an admin's personal token) and `KITSUNE_UPLOAD_TOKEN`. |
 | `kitsune publish [--registry <url>] [--tag next] [--yes] [--request <id> --server <url>]` | Publishes this package to Verdaccio (or npm). **Rehearses by default** (`npm publish --dry-run`); add `--yes` to really publish. Refuses unless the tree is clean, the version is free on the registry and you are signed in (`npm adduser --registry <url>`, or put your token in `KITSUNE_PUBLISH_TOKEN`; it is written to a temporary file that is deleted afterwards). With `--request`, it also checks the request is approved, that you are on the approved commit, and marks it published (needs `KITSUNE_REVIEW_TOKEN`, an admin's personal token). |
 | `kitsune check` | Captures every story, compares with baselines, prints each step with its time and a live capture bar, then a summary. If it breaks, it says what went wrong and how to fix it. **Exits with code 1 if anything needs review**, which is what makes CI fail. |
 | `kitsune serve` | Opens the review dashboard (default http://127.0.0.1:4455): before/after, slider, diff, approve/reject. |

@@ -36,17 +36,45 @@ const MOVES = [
 
 const Pill = ({ state }) => <span className={`pill pill-${STATE_TONE[state] ?? 'plain'}`}>{STATE_LABEL[state] ?? state}</span>;
 
+const WORKER_FRESH_MS = 60_000;
+
 function NewRequest({ onDone }) {
-  const [f, setF] = useState({ source: '', target: '', title: '', sha: '', note: '' });
+  const [f, setF] = useState({ source: '', target: '', title: '', note: '' });
+  const [info, setInfo] = useState(null); // { branches, defaultBranch, fetchedAt, refreshRequestedAt, workerSeenAt }
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  const loadBranches = useCallback(() => remote.branches().then(setInfo).catch((e) => setError(e.message)), []);
+  useEffect(() => { loadBranches(); }, [loadBranches]);
+  // While a fetch is waiting for the worker, look again every 2 seconds.
+  const refreshing = Boolean(info?.refreshRequestedAt);
+  useEffect(() => {
+    if (!refreshing) return undefined;
+    const t = setInterval(loadBranches, 2000);
+    return () => clearInterval(t);
+  }, [refreshing, loadBranches]);
+
+  const fetchNow = async () => {
+    setError(null);
+    try {
+      setInfo(await remote.refreshBranches());
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const branches = info?.branches ?? [];
+  const target = f.target || info?.defaultBranch || '';
+  const picked = branches.find((b) => b.name === f.source);
+  const workerOn = info?.workerSeenAt && Date.now() - Date.parse(info.workerSeenAt) < WORKER_FRESH_MS;
+
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const made = await remote.submitRequest({ ...f, target: f.target.trim() || undefined, sha: f.sha.trim() });
+      const made = await remote.submitRequest({ ...f, target, sha: picked?.sha });
       onDone(made.id);
     } catch (err) {
       setError(err.message);
@@ -58,12 +86,34 @@ function NewRequest({ onDone }) {
     <form className="req-form" onSubmit={submit}>
       <h3>New review request</h3>
       <label>Title<input value={f.title} onChange={set('title')} maxLength={120} required /></label>
-      <label>Your branch<input value={f.source} onChange={set('source')} placeholder="feature/new-button" required /></label>
-      <label>Merge into <span className="muted">(blank = the project's default branch)</span><input value={f.target} onChange={set('target')} placeholder="main" /></label>
-      <label>Commit <span className="muted">(git rev-parse HEAD; the exact version you want reviewed)</span><input value={f.sha} onChange={set('sha')} placeholder="a1b2c3d" required pattern="[0-9a-fA-F]{7,40}" /></label>
+      <div className="br-picker">
+        <label className="br-label">Your branch
+          <select value={f.source} onChange={set('source')} required disabled={!branches.length}>
+            <option value="">{branches.length ? 'Choose a branch…' : 'No branches yet'}</option>
+            {branches.filter((b) => b.name !== target).map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+          </select>
+        </label>
+        <label className="br-label">Merge into
+          <select value={target} onChange={set('target')} disabled={!branches.length}>
+            {branches.filter((b) => b.name !== f.source).map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+          </select>
+        </label>
+        <button type="button" className="btn br-fetch" onClick={fetchNow} disabled={refreshing}>{refreshing ? 'Waiting for the worker…' : 'Fetch'}</button>
+      </div>
+      <p className="muted">
+        {info?.fetchedAt ? `Branch list from ${ago(info.fetchedAt)}.` : 'No branch list yet.'}{' '}
+        {workerOn ? 'The worker is online; Fetch takes a few seconds.' : info ? 'No worker has checked in lately, so Fetch will wait until one starts (kitsune worker).' : ''}
+      </p>
+      {picked && (
+        <p className="muted">
+          Will review <code>{picked.sha.slice(0, 7)}</code>{picked.subject ? ` “${picked.subject}”` : ''}
+          {picked.ahead != null && target === info.defaultBranch ? ` · ${picked.ahead} commit${picked.ahead === 1 ? '' : 's'} ahead of ${target}` : ''}.
+          {' '}Every commit on the branch that is not in {target} is included.
+        </p>
+      )}
       <label>Note <span className="muted">(optional)</span><textarea value={f.note} onChange={set('note')} rows={3} maxLength={2000} /></label>
       {error && <div className="banner">{error}</div>}
-      <button className="btn btn-primary" disabled={busy}>Submit request</button>
+      <button className="btn btn-primary" disabled={busy || !picked}>Submit request</button>
     </form>
   );
 }
@@ -145,13 +195,23 @@ function Detail({ id, session, onChanged }) {
       {req.state === 'open' && <p className="muted">Waiting for the worker to pick this up. It builds the branch, checks it and sends it to review.</p>}
       {req.state === 'building' && !req.run && <p className="muted">The worker has started. Steps will appear here in a moment…</p>}
       <RunProgress run={req.run} />
+      {['approved', 'pr_created'].includes(req.state) && req.prLink && (
+        <p>
+          {req.prLink.url ? (
+            <a className="btn btn-primary" href={req.prLink.url} target="_blank" rel="noopener noreferrer">{req.prLink.provider === 'custom' ? 'Create pull request' : `Create pull request on ${req.prLink.provider}`}</a>
+          ) : (
+            <span className="muted">Pull request link unavailable: {req.prLink.error}</span>
+          )}
+          {req.prLink.url && <span className="muted"> Opens the pull request page with <code>{req.source}</code> → <code>{req.target}</code> filled in. Press Create there.</span>}
+        </p>
+      )}
       {req.reason && !req.run?.failure && (req.state === 'rejected' || req.state === 'changes_requested') && <div className="banner">{req.reason}</div>}
       {error && <div className="banner">{error}</div>}
 
       {moves.length > 0 && (
         <div className="req-actions">
           {needsReason && <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (needed to reject or ask for changes)" maxLength={500} />}
-          {moves.some((m) => m.sha) && <input value={sha} onChange={(e) => setSha(e.target.value)} placeholder="New commit (optional, if you pushed again)" pattern="[0-9a-fA-F]{7,40}" />}
+          {moves.some((m) => m.sha) && <input value={sha} onChange={(e) => setSha(e.target.value)} placeholder="Leave blank to use the branch\u2019s newest commit" pattern="[0-9a-fA-F]{7,40}" />}
           {mustWait && <p className="muted">You sent or built this request, so another reviewer or admin has to approve it.</p>}
           <div className="req-buttons">
             {moves.map((m) => (

@@ -327,3 +327,5 @@ a.ov-card:hover { border-color: var(--text); }
 .run > *, .run-failure { min-width: 0; }
 .run-failure p, .run-failure pre { overflow-wrap: anywhere; }
 .run-failure pre { white-space: pre-wrap; }
+
+.req-form .br-picker select { min-width: 200px; }

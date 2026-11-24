@@ -166,3 +166,49 @@ test('progress: live run, then the finished run is kept (last 5)', async () => {
   assert.equal(svc.listRuns(project, dev, id).runs.length, 1);
   assert.throws(() => svc.listRuns(project, as('Other', 'contributor'), id), /No such request/);
 });
+
+test('branches: the worker reports them and a request can use the newest commit', async () => {
+  const { svc, project, as } = await setup();
+  const dev = as('Dev', 'contributor');
+  const admin = as('Root', 'admin');
+  assert.throws(() => svc.saveBranches(project, dev, { list: [] }), /worker/);
+  assert.throws(() => svc.createRequest(project, dev, { source: 'feat/x', title: 't' }), /Fetch the branches/);
+
+  svc.requestBranchRefresh(project);
+  assert.ok(svc.branchList(project).refreshRequestedAt);
+  svc.saveBranches(project, admin, { list: [{ name: 'feat/x', sha: 'c'.repeat(40), subject: 'Add button', ahead: 2 }, { name: 'bad', sha: 'zzz' }] });
+  const list = svc.branchList(project);
+  assert.deepEqual(list.branches.map((b) => b.name), ['feat/x']);
+  assert.equal(list.refreshRequestedAt, null);
+  assert.ok(list.workerSeenAt && list.fetchedAt);
+
+  const { id, sha } = svc.createRequest(project, dev, { source: 'feat/x', title: 't' });
+  assert.equal(sha, 'c'.repeat(40));
+
+  // The worker reports the commit it really built.
+  svc.moveRequest(project, admin, id, 'build');
+  const built = svc.moveRequest(project, admin, id, 'built', { sha: 'd'.repeat(40) });
+  assert.equal(built.sha, 'd'.repeat(40));
+
+  // A contributor resubmitting without a commit gets the branch's newest one.
+  svc.moveRequest(project, admin, id, 'requestChanges', { reason: 'tweak' });
+  svc.saveBranches(project, admin, { list: [{ name: 'feat/x', sha: 'e'.repeat(40), subject: 'Fix' }] });
+  assert.equal(svc.moveRequest(project, dev, id, 'resubmit').sha, 'e'.repeat(40));
+});
+
+test('pull request link: appears once approved, from the repository address the worker reported', async () => {
+  const { svc, project, as } = await setup();
+  const dev = as('Dev', 'contributor');
+  const admin = as('Root', 'admin');
+  const reviewer = as('Rev', 'reviewer');
+  const { id } = svc.createRequest(project, dev, { source: 'feat/x', title: 't', sha: SHA });
+  assert.equal(svc.getRequest(project, dev, id).prLink, null); // not approved yet
+  svc.moveRequest(project, admin, id, 'build');
+  svc.moveRequest(project, admin, id, 'built');
+  svc.moveRequest(project, reviewer, id, 'approve');
+  assert.match(svc.getRequest(project, dev, id).prLink.error, /not reported/);
+  svc.saveBranches(project, admin, { remoteUrl: 'ssh://git@bitbucket.example.com:7999/PROJ/repo.git' });
+  const link = svc.getRequest(project, dev, id).prLink;
+  assert.equal(link.provider, 'Bitbucket Server');
+  assert.match(link.url, /projects\/PROJ\/repos\/repo\/pull-requests\?create&sourceBranch=refs%2Fheads%2Ffeat%2Fx&targetBranch=refs%2Fheads%2Fmain/);
+});

@@ -410,6 +410,23 @@ biggest change first) and in the Storybook **Visual changes** panel. Tune it wit
 `KITSUNE_REVIEW_TOKEN` and `KITSUNE_UPLOAD_TOKEN` set). It picks up every new review request, fetches the branch,
 builds, checks, uploads and hands the request to reviewers. No one has to run `kitsune check` by hand.
 
+**Picking a branch.** The worker also reports the branches on your remote (it uses the git access that machine
+already has, so Kitsune needs no Bitbucket or GitHub token). The *New request* form therefore offers **Your branch**
+and **Merge into** as dropdowns, shows the newest commit of the branch (and how many commits it is ahead of the
+default branch), and has a **Fetch** button that makes the worker run `git fetch` and refresh the list within a few
+seconds. Every commit on the branch that is not in the target is part of the review. Resubmitting uses the branch's
+newest commit automatically, and the request records the exact commit the worker built.
+
+![New request form](docs/images/new-request-form.png)
+
+**Create pull request.** Once a request is approved it shows a **Create pull request** button that opens your host
+(Bitbucket Server / Data Center, Bitbucket Cloud, GitHub, GitLab) with source and target already filled in; you press
+Create there. No token is needed. The address comes from the worker's `origin`; if your web address differs from your
+git address, or the host is unknown, set `branches.prUrl` in `kitsune.config.js`, e.g.
+`https://git.example.com/projects/P/repos/r/pull-requests?create&sourceBranch=refs/heads/{source}&targetBranch=refs/heads/{target}`.
+
+![Approved request with the Create pull request button](docs/images/create-pr-button.png)
+
 **Build report.** The request page shows the run while it happens and after: each step (Fetch, Checkout, Install,
 Build Storybook, then Capture and Upload) with its time, a progress bar while screenshots are taken, and a summary
 (for example *1 story × 2 viewports × 1 browser = 2 screenshots checked*, with unchanged / new / changed / could not
