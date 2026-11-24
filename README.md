@@ -3,7 +3,7 @@
 A self-hosted, Chromatic-style visual review tool for Storybook. Plain JavaScript. It works with just files in git,
 or with an optional shared review server (SQLite, no Docker) for web approvals and per-branch baselines.
 
-By **Richie Flicker**. For AI assistants and tools: see [`llms.txt`](./llms.txt) (index) and [`llms-full.txt`](./llms-full.txt) (all docs in one file).
+By **Richie Flicker**. For AI assistants and tools: see [`llms.txt`](./llms.txt) (index), [`llms-full.txt`](./llms-full.txt) (all docs in one file) and [`docs/SETUP-FOR-AGENTS.md`](./docs/SETUP-FOR-AGENTS.md) (asks which features to set up, then how).
 
 ```
 kitsune check   →  screenshots every story (Chromium, Firefox, WebKit), diffs against approved baselines, exit 1 if anything changed
@@ -23,6 +23,36 @@ kitsune serve   →  review dashboard: side-by-side / slider / diff views, appro
 - **Lives in Storybook.** A Kitsune tab and a "Visual changes" panel next to Controls, for Storybook 8, 9 and 10.
 
 **Every command and every setting explained: [COMMANDS.md](./COMMANDS.md).**
+
+## Features
+
+**Core review (works on its own, approvals live in git)**
+- Screenshots every Storybook story with Playwright, across viewports and browsers (Chromium, Firefox, WebKit).
+- Compares each with an approved baseline: unchanged, new (auto-approved), changed, or could not render.
+- A review dashboard: side by side, slider and diff views; approve or reject per story; impact badges (Minor, Moderate, Major) you can sort by.
+- A Storybook tab and a "Visual changes" panel (Storybook 8, 9, 10).
+- A Branches page: pick a base and a remote branch, fetch, compare, build a branch, and open a pull request.
+- A git pre-push hook, a GitHub `visual-review` commit status, and exit code 1 for CI.
+- Per-story overrides, masks and thresholds.
+
+**Shared server (a team, in a browser)**
+- One server for the team: SQLite and files, no Docker, per-branch baselines.
+- Four roles (viewer, contributor, reviewer, admin), each with its own home page.
+- Review requests that move through open, building, in review, approved, PR created and published (or changes requested or rejected).
+- A four-eyes rule: whoever sent or built a request cannot approve it (`KITSUNE_ALLOW_SELF_APPROVAL=1` turns it off for one-person teams).
+- An admin Overview page and a Users page.
+- Zoho Cliq alerts to a channel.
+- `kitsune check --remote` for CI uploads, and `kitsune publish --request` to publish an approved request to Verdaccio or npm.
+
+**Automatic builds (the worker)**
+- `kitsune worker` builds each request for you: fetch the branch, install, build Storybook, capture, upload, send to review. See [The worker](#the-worker-automatic-builds-in-detail).
+- Branch dropdowns on the request form with a Fetch button, no commit to type, and no git-host token.
+- A build report on every request: steps with times, a live progress bar, and a summary of stories and screenshots checked.
+- Failures explained in plain English with a fix hint, the last lines of output, and a copyable log. The last five runs are kept.
+- A Create pull request button on approved requests (Bitbucket Server / Data Center, Bitbucket Cloud, GitHub, GitLab).
+
+**For AI assistants:** [docs/SETUP-FOR-AGENTS.md](./docs/SETUP-FOR-AGENTS.md) lists every feature, asks the person which ones they want, and gives the setup steps for each.
+
 
 ## Quick start (try it on the bundled mock Storybook)
 
@@ -449,6 +479,62 @@ only publishes an approved request on the approved commit.
 - A stale approval on an old branch can win over a later change on the default branch for that branch only.
 - SQLite plus local disk means a single server. The storage code is isolated (`src/server/db.js` holds all SQL, image reads and writes go through one service) so Postgres/Mongo, S3, or a NestJS wrapper can be swapped in later.
 - Tested against a fake GitHub API, not real GitHub.
+
+## The worker: automatic builds, in detail
+
+### Why a worker is needed
+
+The shared review server only **stores** things: uploaded screenshots, baselines, approvals and review requests. It has
+no copy of your code, no Node project and no browser. To review a branch, someone has to do four things that need your
+repository: fetch the branch, install its dependencies, build Storybook, and open the built Storybook in a browser to
+take screenshots. Without a worker that someone is a person typing `kitsune check` by hand, or a CI job you configure
+for every project. The worker is a small program that does it for you, on any machine that has a clone of the repo. It
+is the answer when you have no CI access, or simply do not want to wire CI for this.
+
+### How it works
+
+```
+contributor              shared server                       worker (a machine with your repo)
+-----------              -------------                       ---------------------------------
+sends a request  ───────►  request: open      ◄── polls ───  sees an open request
+                           request: building  ◄───────────   Fetch   git fetch, find the branch's newest commit
+                                                             Checkout  temporary copy of that commit
+                                                             Install   only if the lockfile changed
+                                                             Build     Storybook
+                                                             Capture   screenshot every story
+                           screenshots        ◄── upload ──  Upload
+                           compares with the target's baselines
+                           request: in review ◄───────────   moves it on, with the exact commit it built
+reviewer approves  ─────►  request: approved
+anyone                     "Create pull request" button opens your git host with the branches filled in
+```
+
+Every 10 seconds the worker also reports which branches exist on `origin` (running `git fetch` first when someone
+pressed **Fetch** on the request form), so the form can offer them in dropdowns.
+
+- It uses the git access its machine already has (an SSH key or a saved login), so Kitsune needs no Bitbucket, GitHub
+  or GitLab token and stores no git credential.
+- It builds in a temporary copy of the commit. Your own working folder is never touched, and it never pushes or merges.
+- It handles one request at a time. If a step fails, the request goes back to the contributor with a plain explanation
+  (see the build report above). Nothing stays stuck in "building".
+
+### Set it up
+
+1. Run the shared server (above) and create an **admin** personal token for the worker:
+   `npx kitsune server add-user <project> worker --role admin`.
+2. On a machine with a clone of the repo, with git access to it, Node 22.13+, the repo's dependencies and a browser
+   (`npx playwright install chromium`, or `KITSUNE_BROWSER_PATH`):
+
+```bash
+KITSUNE_REVIEW_TOKEN=<the worker's personal token> \
+KITSUNE_UPLOAD_TOKEN=<the project's upload token> \
+npx kitsune worker --server https://kitsune.example.com      # --once to try it, --interval 10 by default
+```
+
+3. Keep it running (a service, `pm2`, `tmux`). If the worker is off, requests simply stay "open" and the Fetch button waits.
+4. Only if needed: `branches.buildCommand` (use `{out}` for the output folder), `branches.output`, `branches.install` and
+   `branches.prUrl` in `kitsune.config.js` when your Storybook is not built the default way or your host is not
+   detected.
 
 ## What this does not do (yet)
 

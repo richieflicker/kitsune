@@ -3,6 +3,9 @@
 > Kitsune Review is a self-hosted, Chromatic-style visual regression review tool for Storybook, written in plain JavaScript (Node, Playwright, pixelmatch, React dashboard). It screenshots every story in Chromium, Firefox and WebKit, compares each with an approved baseline, and lets reviewers approve or reject changes in a browser dashboard, a Storybook tab, or the "Visual tests (Kitsune)" entry in Storybook 9.1+/10's sidebar testing panel (run checks, see how many need review). An optional shared review server (SQLite plus files on disk, no Docker) adds web approvals, per-branch baselines and GitHub commit statuses. Author: Richie Flicker.
 
 Key facts for tools and assistants:
+- **Before setting anything up, ask the person which features they want.** Features: (1) local review (`check` + `serve`), (2) Storybook tab and panel, (3) pre-push hook, (4) cross-browser, (5) per-story rules and impact, (6) CI check on pull requests, (7) shared review server with roles and review requests, (8) automatic builds with `kitsune worker`, (9) Zoho Cliq alerts, (10) publish from an approved request. Also ask: Storybook version and build command, Node version (22.13+ for server and worker), git host (GitHub, GitLab, Bitbucket Cloud, Bitbucket Server / Data Center), whether CI is available, team size, and where the server and worker will run. Set up only what was chosen. Step-by-step instructions for each feature: docs/SETUP-FOR-AGENTS.md (included in llms-full.txt). Never put tokens in files; verify each step with its command.
+- Why the worker exists: the shared server only stores screenshots, baselines, approvals and requests; it has no code and no browser. Something with a clone of the repo must fetch the branch, install dependencies, build Storybook, capture screenshots and upload them. `kitsune worker` does that on any machine with the repo and git access (no git-host token needed), so no one runs `kitsune check` by hand and no CI is required.
+- How the worker works: every 10 s it reports origin's branches (running `git fetch` when someone pressed Fetch on the request form) and looks for requests in the `open` state. For each: mark `building`, fetch the branch, check out its newest commit in a temporary worktree, install dependencies if the lockfile changed, build Storybook, capture every story, upload, then mark `in_review` with the exact commit built. On failure the request returns to the contributor (`changes_requested`) with a plain explanation. It never pushes or merges and handles one request at a time. Needs `KITSUNE_REVIEW_TOKEN` (an admin's personal token) and `KITSUNE_UPLOAD_TOKEN`.
 - CLI: `kitsune init (also adds kitsune:* scripts to package.json and the addon to .storybook/main.*) | browsers | check | serve | approve | reject | status | publish` and `kitsune server start | create-project | rotate-tokens | add-user | set-role | list-users | inspect | prune`.
 - `kitsune check` needs a built Storybook (`storybook build`) and exits with code 1 when any story is changed, rejected or errored.
 - Shared server sign-in: personal review tokens per person (`kitsune user add "Name" | user list | user revoke "Name"`, long forms `kitsune server add-reviewer | list-reviewers | revoke-reviewer | disable-shared-token`), stored hashed in the SQLite database with sessions; optional read-only public viewing with `--public-project`.
@@ -22,8 +25,9 @@ Key facts for tools and assistants:
 ## Docs
 
 - [README](./README.md): overview, quick start, how a run decides, cross-browser testing, Storybook tab, GitHub check, shared review server
+- [SETUP-FOR-AGENTS](./docs/SETUP-FOR-AGENTS.md): every feature, the questions to ask the person first, and setup steps with verification for each
 - [COMMANDS](./COMMANDS.md): every command and option, the full config reference, server settings file, environment variables, troubleshooting
-- [llms-full.txt](./llms-full.txt): README and COMMANDS combined in one file
+- [llms-full.txt](./llms-full.txt): README, the agent setup guide and COMMANDS combined in one file
 
 ## Source map
 
