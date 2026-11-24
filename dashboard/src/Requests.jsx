@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Richie Flicker
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { remote } from './api.js';
 import { ago } from './Branches.jsx';
+import RunProgress from './RunProgress.jsx';
 
 const STATE_LABEL = {
   open: 'Waiting',
@@ -75,8 +76,21 @@ function Detail({ id, session, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [build, setBuild] = useState(null); // the uploaded build for this commit, if there is one
 
-  const load = useCallback(() => remote.request(id).then(setReq).catch((e) => setError(e.message)), [id]);
+  const seenState = useRef(null);
+  const load = useCallback(() => remote.request(id).then((r) => {
+    // The list on the left should follow when the worker moves the request along.
+    if (seenState.current && seenState.current !== r.state) onChanged();
+    seenState.current = r.state;
+    setReq(r);
+  }).catch((e) => setError(e.message)), [id, onChanged]);
   useEffect(() => { setReq(null); setError(null); setReason(''); setSha(''); load(); }, [load]);
+  // While the worker is busy with it, keep the build report fresh.
+  const watching = req && (req.state === 'open' || req.state === 'building');
+  useEffect(() => {
+    if (!watching) return undefined;
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [watching, load]);
 
   useEffect(() => {
     if (!req) return;
@@ -128,7 +142,10 @@ function Detail({ id, session, onChanged }) {
           <span className="muted">No build for this commit has been uploaded yet.</span>
         )}
       </p>
-      {req.reason && (req.state === 'rejected' || req.state === 'changes_requested') && <div className="banner">{req.reason}</div>}
+      {req.state === 'open' && <p className="muted">Waiting for the worker to pick this up. It builds the branch, checks it and sends it to review.</p>}
+      {req.state === 'building' && !req.run && <p className="muted">The worker has started. Steps will appear here in a moment…</p>}
+      <RunProgress run={req.run} />
+      {req.reason && !req.run?.failure && (req.state === 'rejected' || req.state === 'changes_requested') && <div className="banner">{req.reason}</div>}
       {error && <div className="banner">{error}</div>}
 
       {moves.length > 0 && (

@@ -9,6 +9,7 @@ import { describeManifest, postStatusSafely } from '../github.js';
 import { reviewTransition } from '../review-rules.js';
 import { exceedsAllowance } from '../rules.js';
 import { summarize } from '../store.js';
+import { cleanRun } from '../run-stages.js';
 import { checkWebhookUrl, cliqMessage, EVENTS as CLIQ_EVENTS, maskWebhookUrl, postToCliq } from './cliq.js';
 import { ACTIONS as REQUEST_ACTIONS, refusal } from './requests.js';
 import { can as roleCan, DEFAULT_ROLE, ROLES } from './roles.js';
@@ -79,6 +80,8 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
   // One-person teams can switch the four-eyes rule off: KITSUNE_ALLOW_SELF_APPROVAL=1.
   const allowSelfApproval = env.KITSUNE_ALLOW_SELF_APPROVAL === '1';
   const { imagePath, diffPath } = storage;
+  const liveRuns = new Map(); // request id -> { run, log } while a worker is building it
+  const RUNS_KEPT = 5; // finished runs remembered per request
 
   // ---- GitHub status (posted by the server, so approving in the dashboard updates the PR live) ----
   async function notify(project, build, state, description) {
@@ -326,6 +329,38 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       return made;
     },
 
+    /** Called by the worker while it builds: a snapshot of the stages plus the new log lines. */
+    reportProgress(project, session, id, input = {}) {
+      if (!roleCan(session.role, 'build')) throw new HttpError(403, 'Only the worker can report progress');
+      const row = db.requestById(project.id, id);
+      if (!row) throw new HttpError(404, 'No such request');
+      const run = cleanRun(input.run);
+      if (!run || !run.startedAt) throw new HttpError(400, 'run is required');
+      let live = liveRuns.get(id);
+      if (!live || live.run?.startedAt !== run.startedAt) live = { run: null, log: [] };
+      for (const l of (Array.isArray(input.lines) ? input.lines : []).slice(0, 200)) {
+        live.log.push({ t: Math.max(0, Math.round(Number(l?.t) || 0)), stage: l?.stage ? String(l.stage).slice(0, 30) : null, line: String(l?.line ?? '').slice(0, 300) });
+      }
+      live.log = live.log.slice(-300);
+      live.run = run;
+      if (run.finishedAt) {
+        const key = `runs:${id}`;
+        const list = [...(db.getSetting(project.id, key)?.list ?? []), { ...run, log: live.log, sha: row.sha }].slice(-RUNS_KEPT);
+        db.putSetting(project.id, key, { list });
+        liveRuns.delete(id);
+      } else {
+        liveRuns.set(id, live);
+      }
+      return { ok: true };
+    },
+
+    /** The last few finished runs of a request, newest last. */
+    listRuns(project, session, id) {
+      const row = db.requestById(project.id, id);
+      if (!row || (session.role === 'contributor' && row.requester !== session.name)) throw new HttpError(404, 'No such request');
+      return { runs: db.getSetting(project.id, `runs:${id}`)?.list ?? [] };
+    },
+
     listRequests(project, session, { limit = 50 } = {}) {
       // Contributors only see their own requests; everyone else who is signed in sees the whole queue.
       const requester = session.role === 'contributor' ? session.name : null;
@@ -364,7 +399,11 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       if (!row || (session.role === 'contributor' && row.requester !== session.name)) throw new HttpError(404, 'No such request');
       const events = db.eventsFor(id);
       const mustNotApprove = !allowSelfApproval && this.involvedIn(row, events).includes(session.name);
-      return { ...describeRequest(row), events, blockedActions: mustNotApprove ? ['approve'] : [] };
+      const live = liveRuns.get(id);
+      const last = (db.getSetting(project.id, `runs:${id}`)?.list ?? []).at(-1) ?? null;
+      // While a build is starting, an older failed run would only confuse: show nothing until the worker reports.
+      const run = live?.run ? { ...live.run, log: live.log } : row.state === 'building' ? null : last;
+      return { ...describeRequest(row), events, blockedActions: mustNotApprove ? ['approve'] : [], run };
     },
 
     /** Move a request along: build, built, approve, requestChanges, reject, resubmit, pr, publish. */

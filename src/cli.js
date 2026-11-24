@@ -10,6 +10,8 @@ import { loadConfig } from './config.js';
 import { installHook } from './hook.js';
 import { describeManifest, githubContext, postStatusSafely } from './github.js';
 import { runRemoteCheck } from './remote.js';
+import { terminalReporter } from './run-report.js';
+import { createRun } from './run-stages.js';
 import { startServer } from './server.js';
 import { createStore } from './store.js';
 import { ADDON_SNIPPET, addProjectScripts, addStorybookAddon } from './init.js';
@@ -31,11 +33,6 @@ function printSummary(manifest) {
     `\n${s.total} snapshots: ${s.unchanged} unchanged, ${s.new} new (auto-approved), ${s.changed} changed, ${s.accepted} accepted, ${s.rejected} rejected, ${s.error} errors`,
   );
 }
-
-// Single updating line in a terminal; silent in CI logs.
-const terminalProgress = (n, total) => {
-  if (process.stdout.isTTY) process.stdout.write(`\r  captured ${n}/${total}${n === total ? '\n' : ''}`);
-};
 
 function printTokens({ project, uploadToken, reviewToken }) {
   console.log(`Project "${project.name}" (${project.id})`);
@@ -205,7 +202,16 @@ export async function main(argv) {
         if (!token) throw new Error('--remote needs KITSUNE_UPLOAD_TOKEN in the environment (it is never read from the config file).');
 
         const run = detectRun(process.env, { branch: opts.branch, commit: opts.commit ?? opts.sha });
-        const { manifest, build } = await runRemoteCheck(cfg, { url, token, ...run, ancestors: baseAncestors(opts.baseBranch || process.env.KITSUNE_BASE_BRANCH), log: (m) => console.log(m), progress: terminalProgress });
+        const tracked = createRun({ stages: ['capture', 'upload'], secrets: [token], onChange: terminalReporter() });
+        let result;
+        try {
+          result = await runRemoteCheck(cfg, { url, token, ...run, ancestors: baseAncestors(opts.baseBranch || process.env.KITSUNE_BASE_BRANCH), log: (m) => console.log(m), progress: () => {}, run: tracked });
+          tracked.done();
+        } catch (err) {
+          tracked.fail(err);
+          throw err;
+        }
+        const { manifest, build } = result;
         printSummary(manifest);
         if (build.url) console.log(`\nReview: ${build.url}`);
         if (manifest.summary.pending > 0 && opts.fail) process.exitCode = 1;
@@ -218,7 +224,14 @@ export async function main(argv) {
 
       let manifest;
       try {
-        manifest = await runCheck(cfg, { log: (m) => console.log(m), progress: terminalProgress });
+        const tracked = createRun({ stages: ['capture'], onChange: terminalReporter() });
+        try {
+          manifest = await runCheck(cfg, { log: (m) => console.log(m), progress: () => {}, run: tracked });
+          tracked.done();
+        } catch (err) {
+          tracked.fail(err);
+          throw err;
+        }
       } catch (err) {
         // The check itself broke (browser missing, Storybook unreachable...): don't leave the PR stuck on "pending".
         if (gh) await postStatusSafely(gh, { state: 'error', description: `Visual check could not run: ${err.message}` });

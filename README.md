@@ -410,6 +410,17 @@ biggest change first) and in the Storybook **Visual changes** panel. Tune it wit
 `KITSUNE_REVIEW_TOKEN` and `KITSUNE_UPLOAD_TOKEN` set). It picks up every new review request, fetches the branch,
 builds, checks, uploads and hands the request to reviewers. No one has to run `kitsune check` by hand.
 
+**Build report.** The request page shows the run while it happens and after: each step (Fetch, Checkout, Install,
+Build Storybook, then Capture and Upload) with its time, a progress bar while screenshots are taken, and a summary
+(for example *1 story × 2 viewports × 1 browser = 2 screenshots checked*, with unchanged / new / changed / could not
+render). If something breaks, the failed step turns red and a short explanation says what went wrong and how to fix it
+(branch not pushed, git login, install, Storybook build, missing browser, wrong upload token...), with the last lines of
+output and the full log. The last five runs of each request are kept. `kitsune check` prints the same steps in the
+terminal.
+
+![Build report](docs/images/build-report.png)
+![A failed build, explained](docs/images/build-failure.png)
+
 **Publishing.** `kitsune publish` rehearses a publish to Verdaccio (or npm) and, with `--yes`, really publishes. It
 refuses a dirty tree, a version the registry already has, or a missing login; with `--request <id> --server <url>` it
 only publishes an approved request on the approved commit.

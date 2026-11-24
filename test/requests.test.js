@@ -139,3 +139,30 @@ test('four eyes can be switched off for a one-person team', async () => {
   assert.deepEqual(svc.getRequest(project, solo, r.id).blockedActions, []);
   assert.equal(svc.moveRequest(project, solo, r.id, 'approve').state, 'approved');
 });
+
+test('progress: live run, then the finished run is kept (last 5)', async () => {
+  const { svc, project, as } = await setup();
+  const dev = as('Dev', 'contributor');
+  const admin = as('Root', 'admin');
+  const { id } = svc.createRequest(project, dev, { source: 'b', title: 't', sha: SHA });
+  svc.moveRequest(project, admin, id, 'build');
+  assert.equal(svc.getRequest(project, dev, id).run, null); // nothing reported yet
+  assert.throws(() => svc.reportProgress(project, dev, id, { run: { startedAt: 1 } }), /worker/);
+  assert.throws(() => svc.reportProgress(project, admin, id, { run: {} }), /run is required/);
+
+  const base = { startedAt: 1000, status: 'running', stages: [{ id: 'build', label: 'Build Storybook', status: 'running' }] };
+  svc.reportProgress(project, admin, id, { run: base, lines: [{ t: 5, stage: 'build', line: 'vite building' }] });
+  const live = svc.getRequest(project, dev, id).run;
+  assert.equal(live.status, 'running');
+  assert.deepEqual(live.log.map((l) => l.line), ['vite building']);
+
+  const failed = { ...base, status: 'failed', finishedAt: 9000, failure: { stage: 'build', title: 'Storybook build failed', hint: 'fix it', excerpt: ['x'] } };
+  svc.reportProgress(project, admin, id, { run: failed, lines: [{ t: 8, stage: 'build', line: 'Error: boom' }] });
+  svc.moveRequest(project, admin, id, 'buildFailed', { reason: 'boom' });
+  const after = svc.getRequest(project, dev, id).run;
+  assert.equal(after.status, 'failed');
+  assert.equal(after.failure.title, 'Storybook build failed');
+  assert.deepEqual(after.log.map((l) => l.line), ['vite building', 'Error: boom']);
+  assert.equal(svc.listRuns(project, dev, id).runs.length, 1);
+  assert.throws(() => svc.listRuns(project, as('Other', 'contributor'), id), /No such request/);
+});

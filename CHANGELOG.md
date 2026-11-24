@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- **Build report on every request.** Steps with their times (Fetch, Checkout, Install, Build Storybook, Capture, Upload), a live progress bar while screenshots are taken, and a summary of stories, viewports, browsers and screenshots checked with unchanged / new / changed / could not render. Stories that could not render are listed with their error. The last five runs of a request are kept, with a log you can copy. New API: `POST /api/v1/requests/:id/progress` (worker), `GET /api/v1/requests/:id/runs`; a request now carries its latest `run`.
+- **Plain-English failures.** When a run breaks, the failed step turns red and Kitsune says why and how to fix it: branch not on the remote, git login, dependency install (peer conflicts, registry), Storybook build, missing build command or output folder, browser not installed, no stories, upload token rejected, server unreachable, timeouts. Tokens and credentials are removed from every line first.
+- **`kitsune check` prints the same steps** with times, a live capture bar and the same explanation on failure.
 - **`kitsune worker`: builds requests for you.** Run it on any machine that has the repository (a build box or a laptop). It watches the shared server for open requests, fetches the branch, builds Storybook in a throw-away worktree, runs the check, uploads it and moves the request to in review. If the build fails, the request goes back to the contributor with the reason (new `buildFailed` step, also a Cliq alert). Needs `KITSUNE_REVIEW_TOKEN` (an admin's personal token) and `KITSUNE_UPLOAD_TOKEN`.
 - **Four eyes on request approval.** Whoever sent a request or built it (started or finished the build) cannot approve it; another reviewer or admin has to. Asking for changes or rejecting is still allowed. The dashboard hides the Approve button and says why. One-person teams can switch it off with `KITSUNE_ALLOW_SELF_APPROVAL=1`.
 

@@ -6,6 +6,7 @@ import { captureAll } from './capture.js';
 import { git } from './ci.js';
 import { comparePngs } from './compare.js';
 import { REJECT_AFTER_APPROVE_MESSAGE, reviewTransition } from './review-rules.js';
+import { summaryOf } from './run-stages.js';
 import { compareRules, exceedsAllowance, resolveRules } from './rules.js';
 import { createStore, storyKey, summarize } from './store.js';
 import { fetchStories, filterStories, resolveStorybook } from './storybook.js';
@@ -64,12 +65,23 @@ export async function captureRun(cfg, store, { log = () => {}, progress = () => 
  *  - baseline exists, differs  -> "changed" (waits for a human to approve/reject)
  *  - story could not render    -> "error"
  */
-export async function runCheck(cfg, { log = () => {}, progress = () => {} } = {}) {
+export async function runCheck(cfg, { log = () => {}, progress = () => {}, run = null } = {}) {
   const store = createStore(cfg);
   store.resetCurrent();
   const approved = store.readApproved();
 
-  const { captured } = await captureRun(cfg, store, { log, progress });
+  const { captured } = await captureRun(cfg, store, {
+    log,
+    progress: (n, total) => {
+      run?.progress('capture', n, total);
+      progress(n, total);
+    },
+    onPlan: ({ stories, total }) => {
+      run?.start('capture', { total });
+      run?.setSummary({ stories: stories.length, screenshots: total, viewports: cfg.viewports.length, browsers: cfg.browsers.length });
+    },
+  });
+  run?.finish('capture');
 
   const buildId = new Date().toISOString().replace(/[:.]/g, '-');
   const items = [];
@@ -123,6 +135,7 @@ export async function runCheck(cfg, { log = () => {}, progress = () => {} } = {}
     stories: items,
   };
   store.writeManifest(manifest);
+  run?.setSummary(summaryOf(manifest, captured));
   return manifest;
 }
 

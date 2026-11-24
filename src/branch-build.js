@@ -127,7 +127,7 @@ function defaultBuildCommand(dir) {
  * Check a commit out into a temporary git worktree, give it dependencies, build its Storybook, and hand the
  * built folder to `fn`. The worktree is always removed afterwards. Your own working folder is never touched.
  */
-export async function withBuiltStorybook(cfg, sha, { cwd = process.cwd(), label = 'Build', note = () => {}, phase = note } = {}, fn) {
+export async function withBuiltStorybook(cfg, sha, { cwd = process.cwd(), label = 'Build', note = () => {}, phase = note, stage = () => {} } = {}, fn) {
   const root = await repoRoot(cwd);
   const real = fs.realpathSync(cwd);
   const live = { root, cwd: real, sub: path.relative(root, real) };
@@ -140,12 +140,15 @@ export async function withBuiltStorybook(cfg, sha, { cwd = process.cwd(), label 
   };
   await clean();
 
+  stage('checkout');
   phase(`${label}: checking out ${short(sha)}`);
   await git(['worktree', 'add', '--detach', wtRoot, sha], { cwd: live.root, timeout: 120_000 });
   try {
+    stage('install');
     phase(`${label}: preparing dependencies`);
     await ensureDeps({ cfg, wt, live, log: note });
 
+    stage('build');
     phase(`${label}: building Storybook`);
     const out = path.resolve(wt.cwd, cfg.branches?.output ?? '.kitsune-storybook');
     const command = (cfg.branches?.buildCommand ?? defaultBuildCommand(wt.cwd)).replaceAll('{out}', quote(out));

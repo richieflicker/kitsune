@@ -23,12 +23,56 @@ test('worker: build then check then built', async () => {
   assert.equal(checked.cfg.storybook.dir, '/out');
 });
 
-test('worker: a failed build goes back with a reason and hides the token', async () => {
-  const session = fakeSession();
-  await processRequest(req, { cfg: {}, cwd: '.', url: 'http://s', uploadToken: 'SECRET', session, ...ok, build: async () => { throw new Error('vite failed\nusing SECRET here'); } });
+function recordingSession(requests) {
+  const session = fakeSession(requests);
+  session.posts = [];
+  session.progress = async (id, body) => session.posts.push(body);
+  return session;
+}
+
+test('worker: a failed build goes back with a plain reason and the token never leaves', async () => {
+  const session = recordingSession();
+  const failing = async (cfg, sha, o, fn) => {
+    o.stage('install');
+    o.stage('build');
+    o.note('vite: Could not resolve ./Button');
+    throw new Error('Command failed (exit 1) using SECRETTOKEN here');
+  };
+  await processRequest(req, { cfg: {}, cwd: '.', url: 'http://s', uploadToken: 'SECRETTOKEN', session, ...ok, build: failing, throttleMs: 0 });
   assert.deepEqual(session.moves.map((m) => m[1]), ['build', 'buildFailed']);
-  assert.ok(!session.moves[1][2].includes('SECRET'));
-  assert.match(session.moves[1][2], /vite failed/);
+  assert.match(session.moves[1][2], /Storybook.s own build failed \(during "Build Storybook"\)/);
+  assert.ok(!JSON.stringify(session.posts).includes('SECRETTOKEN'));
+  assert.ok(!session.moves[1][2].includes('SECRETTOKEN'));
+  const last = session.posts.at(-1).run;
+  assert.equal(last.status, 'failed');
+  assert.equal(last.failure.stage, 'build');
+  assert.equal(last.stages.find((x) => x.id === 'install').status, 'done');
+  const lines = session.posts.flatMap((p) => p.lines).map((l) => l.line);
+  assert.ok(lines.includes('vite: Could not resolve ./Button'));
+});
+
+test('worker: stages and counts are reported while it runs', async () => {
+  const session = recordingSession();
+  const build = async (cfg, sha, o, fn) => {
+    o.stage('checkout');
+    o.stage('install');
+    o.stage('build');
+    return fn({ out: '/out', wt: { cwd: '/tmp' } });
+  };
+  const check = async (cfg, o) => {
+    o.run.start('capture', { total: 4 });
+    o.run.setSummary({ stories: 2, screenshots: 4 });
+    o.run.progress('capture', 4, 4);
+    o.run.finish('capture');
+    o.run.start('upload', { total: 4 });
+    o.run.finish('upload');
+  };
+  await processRequest(req, { cfg: {}, cwd: '.', url: 'http://s', uploadToken: 'kitsune_up_x1y2z3', session, ...ok, build, check, throttleMs: 0 });
+  const last = session.posts.at(-1).run;
+  assert.equal(last.status, 'done');
+  assert.deepEqual(last.stages.map((x) => [x.id, x.status]), [['fetch', 'done'], ['checkout', 'done'], ['install', 'done'], ['build', 'done'], ['capture', 'done'], ['upload', 'done']]);
+  assert.equal(last.summary.screenshots, 4);
+  assert.deepEqual(session.moves.map((m) => m[1]), ['build', 'built']);
 });
 
 test('worker: only open requests are picked up, and --once returns', async () => {

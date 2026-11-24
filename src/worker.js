@@ -10,6 +10,7 @@ import { git, repoRoot } from './branches.js';
 import { withBuiltStorybook } from './branch-build.js';
 import { openRemote } from './publish-remote.js';
 import { runRemoteCheck } from './remote.js';
+import { createRun, formatMs } from './run-stages.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -35,21 +36,51 @@ async function resolveSha(req, cwd) {
 }
 
 /** Build and upload one request. Returns the commit that was checked. */
-export async function processRequest(req, { cfg, cwd, url, uploadToken, session, log = () => {}, build = withBuiltStorybook, check = runRemoteCheck, resolve = resolveSha }) {
+export async function processRequest(req, { cfg, cwd, url, uploadToken, session, log = () => {}, build = withBuiltStorybook, check = runRemoteCheck, resolve = resolveSha, throttleMs = 1000 }) {
+  // The run records stages, counts and output. A copy goes to the request page while it happens.
+  let chain = Promise.resolve();
+  let lastSent = 0;
+  const send = (snap) => {
+    const lines = run.drainLines();
+    const { log: _omit, ...wire } = snap; // log lines travel separately, only the new ones
+    chain = chain.then(() => session.progress?.(req.id, { run: wire, lines }).catch(() => {}));
+  };
+  const run = createRun({
+    secrets: [uploadToken],
+    onChange: (kind, snap) => {
+      if (kind === 'stage') return send(snap);
+      if (Date.now() - lastSent < throttleMs) return;
+      lastSent = Date.now();
+      send(snap);
+    },
+  });
+  const note = (line) => {
+    run.note(line);
+    log(`${req.title}: ${String(line).split('\n')[0]}`);
+  };
+
   await session.move(req.id, 'build');
   try {
+    run.start('fetch');
+    note(`Fetching ${req.source} from origin`);
     const sha = await resolve(req, cwd);
-    log(`${req.title}: building ${req.source} @ ${sha.slice(0, 7)}`);
-    await build(cfg, sha, { cwd, label: req.title, note: log }, async ({ out, wt }) => {
+    run.finish('fetch', sha.slice(0, 7));
+    note(`Building ${req.source} @ ${sha.slice(0, 7)}`);
+    await build(cfg, sha, { cwd, label: 'Build', note, phase: note, stage: (id) => run.start(id) }, async ({ out, wt }) => {
       const runCfg = { ...cfg, storybook: { ...cfg.storybook, url: null, dir: out } };
-      await check(runCfg, { url, token: uploadToken, branch: req.source, commit: sha, ancestors: baseAncestors(req.target, { cwd: wt.cwd }), log });
+      await check(runCfg, { url, token: uploadToken, branch: req.source, commit: sha, ancestors: baseAncestors(req.target, { cwd: wt.cwd }), log: note, run });
     });
+    run.done();
+    await chain;
     await session.move(req.id, 'built');
-    log(`${req.title}: ready for review`);
+    log(`${req.title}: ready for review (${formatMs(run.snapshot().ms)})`);
     return sha;
   } catch (err) {
-    const reason = failureReason(err, [uploadToken]);
-    log(`${req.title}: failed (${reason})`);
+    const failure = run.fail(err);
+    log(`${req.title}: failed at "${failure.stage}": ${failure.title}`);
+    await chain;
+    const where = run.snapshot().stages.find((s) => s.id === failure.stage)?.label ?? failure.stage;
+    const reason = `${failure.title} (during "${where}"). Open the request to see the full report.`;
     await session.move(req.id, 'buildFailed', { reason }).catch(() => {});
     return null;
   }
