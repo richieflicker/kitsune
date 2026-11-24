@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import { captureRun } from './check.js';
 import { compareRules } from './rules.js';
+import { summaryOf } from './run-stages.js';
 import { createStore } from './store.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -53,7 +54,7 @@ async function pool(items, size, fn) {
  * Capture locally, upload every screenshot to the shared review server, and let the server compare
  * against the branch baselines. Returns { manifest, build }.
  */
-export async function runRemoteCheck(cfg, { url, token, branch, commit, ancestors, log = () => {}, progress = () => {} }) {
+export async function runRemoteCheck(cfg, { url, token, branch, commit, ancestors, log = () => {}, progress = () => {}, run = null }) {
   const base = url.replace(/\/$/, '');
   const store = createStore(cfg);
   store.resetCurrent();
@@ -62,10 +63,15 @@ export async function runRemoteCheck(cfg, { url, token, branch, commit, ancestor
   try {
     const { captured } = await captureRun(cfg, store, {
       log,
-      progress,
+      progress: (n, total) => {
+        run?.progress('capture', n, total);
+        progress(n, total);
+      },
       // Create the build as soon as the plan is known: GitHub shows "pending" while we capture,
       // and a wrong URL/token fails before any browser is launched.
-      onPlan: async ({ total }) => {
+      onPlan: async ({ stories, total }) => {
+        run?.start('capture', { total });
+        run?.setSummary({ stories: stories.length, screenshots: total, viewports: cfg.viewports.length, browsers: cfg.browsers.length });
         build = await api(base, token, 'POST', '/api/v1/builds', {
           json: {
             branch,
@@ -81,7 +87,10 @@ export async function runRemoteCheck(cfg, { url, token, branch, commit, ancestor
       },
     });
 
+    run?.finish('capture');
+    run?.start('upload', { total: captured.length });
     log(`Uploading ${captured.length} snapshots...`);
+    let uploaded = 0;
     await pool(captured, 4, async (r) => {
       const meta = { storyId: r.story.id, title: r.story.title, name: r.story.name, viewport: r.viewport.name, browser: r.browser.name, rules: compareRules(r.rules) };
       const route = `/api/v1/builds/${build.id}/snapshots/${r.key}`;
@@ -93,9 +102,13 @@ export async function runRemoteCheck(cfg, { url, token, branch, commit, ancestor
       } else {
         await api(base, token, 'PUT', `${route}/error`, { json: { meta, message: r.error } });
       }
+      uploaded += 1;
+      run?.progress('upload', uploaded, captured.length);
     });
 
     const manifest = await api(base, token, 'POST', `/api/v1/builds/${build.id}/finalize`);
+    run?.finish('upload');
+    run?.setSummary(summaryOf(manifest, captured));
     return { manifest, build };
   } catch (err) {
     // Don't leave the pull request stuck on "pending" if the run died half way.

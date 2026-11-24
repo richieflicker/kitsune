@@ -205,6 +205,13 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
     send(res, 200, { builds: svc.listBuilds(project, { branch: url.searchParams.get('branch') || undefined, limit: url.searchParams.get('limit') }) });
   });
 
+  // ---- build progress: the worker posts it, the request page reads it ----
+  route('POST', '/api/v1/requests/(?<id>[^/]+)/progress', 'session', async ({ req, res, project, session, params }) => {
+    requireCsrfHeader(req);
+    send(res, 200, svc.reportProgress(project, session, params.id, await readJson(req)));
+  });
+  route('GET', '/api/v1/requests/(?<id>[^/]+)/runs', 'session', ({ res, project, session, params }) => send(res, 200, svc.listRuns(project, session, params.id)));
+
   // ---- review requests (session) ----
   route('GET', '/api/v1/requests', 'session', ({ res, project, session, url }) =>
     send(res, 200, { requests: svc.listRequests(project, session, { limit: url.searchParams.get('limit') }) }));

@@ -300,3 +300,30 @@ a.ov-card:hover { border-color: var(--text); }
 .ov-list li:last-child { border-bottom: 0; }
 .ov-list a { color: var(--text); text-decoration: none; }
 @media (max-width: 800px) { .ov-cols { grid-template-columns: 1fr; } }
+
+/* Build report */
+.run { display: grid; gap: 8px; margin: 12px 0; }
+.run-head { display: flex; justify-content: space-between; align-items: baseline; }
+.run-group { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+.run-stages { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+.run-stage { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; align-items: center; font-size: 14px; }
+.run-icon { text-align: center; font-weight: 700; color: var(--muted); }
+.run-done .run-icon { color: var(--ok); }
+.run-stage.run-failed .run-icon, .run-stage.run-failed .run-icon { color: var(--bad); }
+.run-running .run-icon { color: var(--primary); animation: run-spin 1.2s linear infinite; display: inline-block; }
+.run-pending { opacity: .6; }
+.run-bar { grid-column: 2 / 4; display: flex; align-items: center; gap: 10px; }
+.run-bar progress { flex: 1; height: 8px; }
+.run-failure { border: 1px solid var(--bad); border-radius: 8px; padding: 10px 12px; margin-top: 6px; }
+.run-failure h4 { margin: 0 0 4px; color: var(--bad); }
+.run-failure p { margin: 2px 0; }
+.run-summary { border-top: 1px solid var(--border); padding-top: 8px; }
+.run-summary p { margin: 4px 0; }
+.run-failed-list { padding-left: 18px; margin: 6px 0 0; }
+.run-log summary { cursor: pointer; }
+@keyframes run-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .run-running .run-icon { animation: none; } }
+
+.run > *, .run-failure { min-width: 0; }
+.run-failure p, .run-failure pre { overflow-wrap: anywhere; }
+.run-failure pre { white-space: pre-wrap; }
