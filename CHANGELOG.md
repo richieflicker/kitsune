@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 ### Added
 - **Branch dropdowns on the request form.** The worker reports the branches on `origin`; the form offers *Your branch* and *Merge into* as selects, shows the branch's newest commit and how far ahead it is, and has a **Fetch** button that makes the worker run `git fetch`. No commit to type, and no Bitbucket token: the worker uses the git access its machine already has. New API: `GET /api/v1/branches`, `POST /api/v1/branches/refresh`, `PUT /api/v1/worker/branches`; a request can be created without `sha`.
@@ -13,6 +13,8 @@
 - **Four eyes on request approval.** Whoever sent a request or built it (started or finished the build) cannot approve it; another reviewer or admin has to. Asking for changes or rejecting is still allowed. The dashboard hides the Approve button and says why. One-person teams can switch it off with `KITSUNE_ALLOW_SELF_APPROVAL=1`.
 
 ### Docs
+- README has a **Features** list and a full section on **the worker**: why it is needed, how it works step by step, and how to set it up.
+- New **docs/SETUP-FOR-AGENTS.md** (also inside `llms-full.txt`, linked from `llms.txt`): tells an AI assistant to ask which features the person wants (and a few questions about their Storybook, Node, git host, CI and team), then gives setup and verification steps for each of the ten features.
 - README now opens with a 50-second demo of all four roles and has screenshots for each role and for the Storybook panel; `llms-full.txt` is built without pictures.
 
 ### Fixed
