@@ -256,7 +256,7 @@ export async function main(argv) {
     .description('Build review requests automatically: fetch the branch, build Storybook, check, upload, and hand the request to reviewers')
     .requiredOption('--server <url>', 'the shared review server')
     .option('--once', 'handle what is waiting, then exit')
-    .option('--interval <seconds>', 'how often to look for new requests', '30')
+    .option('--interval <seconds>', 'how often to look for new requests', '10')
     .action(async (opts) => {
       const cfg = await cfgOf();
       const { runWorker } = await import('./worker.js');
@@ -270,7 +270,7 @@ export async function main(argv) {
           uploadToken: process.env.KITSUNE_UPLOAD_TOKEN,
           cfg,
           once: Boolean(opts.once),
-          interval: Math.max(Number(opts.interval) || 30, 5),
+          interval: Math.max(Number(opts.interval) || 10, 3),
           signal: ctl.signal,
         });
       } catch (err) {

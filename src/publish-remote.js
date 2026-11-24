@@ -21,6 +21,8 @@ export async function openRemote(server, token, fetchImpl = fetch) {
     getRequest: (id) => call('GET', `/api/v1/requests/${encodeURIComponent(id)}`),
     listRequests: (limit = 100) => call('GET', `/api/v1/requests?limit=${limit}`).then((d) => d.requests ?? []),
     move: (id, action, body = {}) => call('POST', `/api/v1/requests/${encodeURIComponent(id)}/${action}`, body),
+    getBranches: () => call('GET', '/api/v1/branches'),
+    putBranches: (body = {}) => call('PUT', '/api/v1/worker/branches', body),
     progress: (id, body) => call('POST', `/api/v1/requests/${encodeURIComponent(id)}/progress`, body),
     markPublished: (id) => call('POST', `/api/v1/requests/${encodeURIComponent(id)}/publish`, {}),
   };

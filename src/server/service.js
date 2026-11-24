@@ -9,6 +9,7 @@ import { describeManifest, postStatusSafely } from '../github.js';
 import { reviewTransition } from '../review-rules.js';
 import { exceedsAllowance } from '../rules.js';
 import { summarize } from '../store.js';
+import { pullRequestLink } from '../pr-link.js';
 import { cleanRun } from '../run-stages.js';
 import { checkWebhookUrl, cliqMessage, EVENTS as CLIQ_EVENTS, maskWebhookUrl, postToCliq } from './cliq.js';
 import { ACTIONS as REQUEST_ACTIONS, refusal } from './requests.js';
@@ -305,8 +306,10 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
     // ---------- review requests ----------
     createRequest(project, session, input) {
       if (!roleCan(session.role, 'request')) throw new HttpError(403, 'Your role cannot submit review requests');
-      const sha = String(input.sha ?? '').toLowerCase();
-      if (!/^[0-9a-f]{7,40}$/.test(sha)) throw new HttpError(400, 'sha must be a 7-40 character hex commit');
+      const source = cleanText(input.source, 200, 'source branch');
+      // Without a commit, take the newest one the worker saw for this branch.
+      const sha = String(input.sha || this.branchList(project).branches.find((b) => b.name === source)?.sha || '').toLowerCase();
+      if (!/^[0-9a-f]{7,40}$/.test(sha)) throw new HttpError(400, input.sha ? 'sha must be a 7-40 character hex commit' : `No commit known for "${source}". Fetch the branches first, or give a commit.`);
       const note = input.note == null || input.note === '' ? null : String(input.note);
       if (note && (note.length > 2000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(note))) throw new HttpError(400, 'note must be at most 2000 characters');
       const at = new Date().toISOString();
@@ -314,7 +317,7 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
         id: `rq_${crypto.randomBytes(6).toString('hex')}`,
         projectId: project.id,
         requester: session.name,
-        source: cleanText(input.source, 200, 'source branch'),
+        source,
         target: cleanText(input.target || project.default_branch, 200, 'target branch'),
         sha,
         title: cleanText(input.title, 120, 'title'),
@@ -327,6 +330,59 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       const made = this.getRequest(project, session, request.id);
       void announce(project, 'submitted', made, session.name);
       return made;
+    },
+
+    // ---- branches: the worker (which has the git checkout) reports them; the request form shows them ----
+    branchList(project) {
+      const saved = db.getSetting(project.id, 'branches') ?? {};
+      return {
+        branches: Array.isArray(saved.list) ? saved.list : [],
+        defaultBranch: project.default_branch,
+        fetchedAt: saved.fetchedAt ?? null,
+        refreshRequestedAt: saved.refreshRequestedAt ?? null,
+        workerSeenAt: saved.workerSeenAt ?? null,
+      };
+    },
+
+    /** The "Fetch" button: ask the worker to run git fetch and report again. */
+    requestBranchRefresh(project) {
+      const saved = db.getSetting(project.id, 'branches') ?? {};
+      db.putSetting(project.id, 'branches', { ...saved, refreshRequestedAt: new Date().toISOString() });
+      return this.branchList(project);
+    },
+
+    /** Called by the worker. `list` may be omitted for a plain "I am alive" ping. */
+    saveBranches(project, session, input = {}) {
+      if (!roleCan(session.role, 'build')) throw new HttpError(403, 'Only the worker (an admin token) can report branches');
+      const saved = db.getSetting(project.id, 'branches') ?? {};
+      const now = new Date().toISOString();
+      const next = { ...saved, workerSeenAt: now };
+      if (typeof input.remoteUrl === 'string') next.remoteUrl = input.remoteUrl.slice(0, 300);
+      if (typeof input.prUrl === 'string') next.prUrl = input.prUrl.slice(0, 500);
+      if (Array.isArray(input.list)) {
+        next.list = input.list.slice(0, 500).map((b) => ({
+          name: cleanText(b?.name, 200, 'branch name'),
+          sha: String(b?.sha ?? '').toLowerCase().slice(0, 40),
+          subject: String(b?.subject ?? '').slice(0, 200),
+          date: b?.date ? String(b.date).slice(0, 40) : null,
+          ahead: Number.isInteger(b?.ahead) ? b.ahead : null,
+        })).filter((b) => /^[0-9a-f]{7,40}$/.test(b.sha));
+        next.fetchedAt = now;
+        next.refreshRequestedAt = null;
+      }
+      db.putSetting(project.id, 'branches', next);
+      return this.branchList(project);
+    },
+
+    /** Where to press "Create pull request" for this request (the page opens with source and target filled in). */
+    prLinkFor(project, request) {
+      const saved = db.getSetting(project.id, 'branches') ?? {};
+      if (!saved.remoteUrl && !saved.prUrl) return { error: 'The worker has not reported the repository address yet.' };
+      try {
+        return pullRequestLink(saved.remoteUrl, request.source_branch, request.target_branch, { template: saved.prUrl || undefined });
+      } catch (err) {
+        return { error: err.message };
+      }
     },
 
     /** Called by the worker while it builds: a snapshot of the stages plus the new log lines. */
@@ -403,7 +459,8 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       const last = (db.getSetting(project.id, `runs:${id}`)?.list ?? []).at(-1) ?? null;
       // While a build is starting, an older failed run would only confuse: show nothing until the worker reports.
       const run = live?.run ? { ...live.run, log: live.log } : row.state === 'building' ? null : last;
-      return { ...describeRequest(row), events, blockedActions: mustNotApprove ? ['approve'] : [], run };
+      const showPr = ['approved', 'pr_created'].includes(row.state);
+      return { ...describeRequest(row), events, blockedActions: mustNotApprove ? ['approve'] : [], run, prLink: showPr ? this.prLinkFor(project, row) : null };
     },
 
     /** Move a request along: build, built, approve, requestChanges, reject, resubmit, pr, publish. */
@@ -421,13 +478,17 @@ export function createService({ db, dataDir, storage = createFsStorage({ dataDir
       const reason = input.reason == null || input.reason === '' ? null : cleanText(input.reason, 500, 'reason');
       if (rule.reason && !reason) throw new HttpError(400, 'A reason is required');
       let sha = row.sha;
-      if (action === 'resubmit' && input.sha) {
-        sha = String(input.sha).toLowerCase();
-        if (!/^[0-9a-f]{7,40}$/.test(sha)) throw new HttpError(400, 'sha must be a 7-40 character hex commit');
+      // The worker reports the exact commit it built; a contributor resubmitting may name one, else we use the branch's newest.
+      const named = (action === 'resubmit' || action === 'build' || action === 'built') && input.sha ? String(input.sha).toLowerCase() : null;
+      if (named) {
+        if (!/^[0-9a-f]{7,40}$/.test(named)) throw new HttpError(400, 'sha must be a 7-40 character hex commit');
+        sha = named;
+      } else if (action === 'resubmit') {
+        sha = this.branchList(project).branches.find((b) => b.name === row.source_branch)?.sha ?? row.sha;
       }
       const at = new Date().toISOString();
       db.updateRequest(id, { state: rule.to, reason: rule.reason ? reason : null, sha, at });
-      db.addEvent({ requestId: id, actor: session.name, kind: action, detail: reason ?? (action === 'resubmit' && sha !== row.sha ? `new commit ${sha.slice(0, 12)}` : null), at });
+      db.addEvent({ requestId: id, actor: session.name, kind: action, detail: reason ?? ((action === 'resubmit' || action === 'built') && sha !== row.sha ? `commit ${sha.slice(0, 12)}` : null), at });
       const moved = this.getRequest(project, session, id);
       if (CLIQ_EVENTS.includes(action)) void announce(project, action, moved, session.name);
       return moved;

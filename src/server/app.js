@@ -205,6 +205,21 @@ export async function startRemoteServer({ dataDir, imagesDir, diffsDir, archiveD
     send(res, 200, { builds: svc.listBuilds(project, { branch: url.searchParams.get('branch') || undefined, limit: url.searchParams.get('limit') }) });
   });
 
+  // ---- branches, reported by the worker and shown in the request form ----
+  route('GET', '/api/v1/branches', 'session', ({ res, project, session }) => {
+    if (!can(session.role, 'request')) throw new HttpError(403, 'Your role cannot submit review requests');
+    send(res, 200, svc.branchList(project));
+  });
+  route('POST', '/api/v1/branches/refresh', 'session', ({ req, res, project, session }) => {
+    requireCsrfHeader(req);
+    if (!can(session.role, 'request')) throw new HttpError(403, 'Your role cannot submit review requests');
+    send(res, 200, svc.requestBranchRefresh(project));
+  });
+  route('PUT', '/api/v1/worker/branches', 'session', async ({ req, res, project, session }) => {
+    requireCsrfHeader(req);
+    send(res, 200, svc.saveBranches(project, session, await readJson(req)));
+  });
+
   // ---- build progress: the worker posts it, the request page reads it ----
   route('POST', '/api/v1/requests/(?<id>[^/]+)/progress', 'session', async ({ req, res, project, session, params }) => {
     requireCsrfHeader(req);
