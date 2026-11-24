@@ -13,6 +13,8 @@
 - **Four eyes on request approval.** Whoever sent a request or built it (started or finished the build) cannot approve it; another reviewer or admin has to. Asking for changes or rejecting is still allowed. The dashboard hides the Approve button and says why. One-person teams can switch it off with `KITSUNE_ALLOW_SELF_APPROVAL=1`.
 
 ### Docs
+- README has a **Features** list and a full section on **the worker**: why it is needed, how it works step by step, and how to set it up.
+- New **docs/SETUP-FOR-AGENTS.md** (also inside `llms-full.txt`, linked from `llms.txt`): tells an AI assistant to ask which features the person wants (and a few questions about their Storybook, Node, git host, CI and team), then gives setup and verification steps for each of the ten features.
 - README now opens with a 50-second demo of all four roles and has screenshots for each role and for the Storybook panel; `llms-full.txt` is built without pictures.
 
 ### Fixed
