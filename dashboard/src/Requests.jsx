@@ -17,7 +17,7 @@ const STATE_LABEL = {
 };
 const STATE_TONE = { approved: 'ok', pr_created: 'ok', published: 'ok', rejected: 'bad', changes_requested: 'warn', building: 'info', in_review: 'info', open: 'plain' };
 const EVENT_LABEL = {
-  submitted: 'submitted the request', build: 'started the build', built: 'finished the build', approve: 'approved',
+  submitted: 'submitted the request', build: 'started the build', built: 'finished the build', buildFailed: 'reported a failed build', approve: 'approved',
   requestChanges: 'asked for changes', reject: 'rejected', resubmit: 'resubmitted', pr: 'created the pull request', publish: 'published',
 };
 

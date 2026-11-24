@@ -124,6 +124,40 @@ function defaultBuildCommand(dir) {
 }
 
 /**
+ * Check a commit out into a temporary git worktree, give it dependencies, build its Storybook, and hand the
+ * built folder to `fn`. The worktree is always removed afterwards. Your own working folder is never touched.
+ */
+export async function withBuiltStorybook(cfg, sha, { cwd = process.cwd(), label = 'Build', note = () => {}, phase = note } = {}, fn) {
+  const root = await repoRoot(cwd);
+  const real = fs.realpathSync(cwd);
+  const live = { root, cwd: real, sub: path.relative(root, real) };
+  const wtRoot = path.join(os.tmpdir(), 'kitsune-worktrees', hash(live.root, 10), sha.slice(0, 12));
+  const wt = { root: wtRoot, cwd: path.join(wtRoot, live.sub) };
+  const clean = async () => {
+    await git(['worktree', 'remove', '--force', wtRoot], { cwd: live.root }).catch(() => {});
+    fs.rmSync(wtRoot, { recursive: true, force: true });
+    await git(['worktree', 'prune'], { cwd: live.root }).catch(() => {});
+  };
+  await clean();
+
+  phase(`${label}: checking out ${short(sha)}`);
+  await git(['worktree', 'add', '--detach', wtRoot, sha], { cwd: live.root, timeout: 120_000 });
+  try {
+    phase(`${label}: preparing dependencies`);
+    await ensureDeps({ cfg, wt, live, log: note });
+
+    phase(`${label}: building Storybook`);
+    const out = path.resolve(wt.cwd, cfg.branches?.output ?? '.kitsune-storybook');
+    const command = (cfg.branches?.buildCommand ?? defaultBuildCommand(wt.cwd)).replaceAll('{out}', quote(out));
+    await runShell(command, { cwd: wt.cwd, onLine: note });
+    if (!fs.existsSync(out)) throw new Error(`The build finished but ${path.relative(wt.cwd, out)} was not created. Set branches.output or branches.buildCommand.`);
+    return await fn({ out, wt });
+  } finally {
+    await clean();
+  }
+}
+
+/**
  * Builds and screenshots branches, then compares two of them.
  * `capture` can be replaced (tests do, to avoid launching a browser).
  */
@@ -186,48 +220,29 @@ export function createBranchBuilder(cfg, { cwd = process.cwd(), capture = captur
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
 
-    const wtRoot = path.join(os.tmpdir(), 'kitsune-worktrees', hash(live.root, 10), sha.slice(0, 12));
-    const wt = { root: wtRoot, cwd: path.join(wtRoot, live.sub) };
-    await git(['worktree', 'remove', '--force', wtRoot], { cwd: live.root }).catch(() => {});
-    fs.rmSync(wtRoot, { recursive: true, force: true });
-    await git(['worktree', 'prune'], { cwd: live.root }).catch(() => {});
-
-    phase(`${label}: checking out ${short(sha)}`);
-    await git(['worktree', 'add', '--detach', wtRoot, sha], { cwd: live.root, timeout: 120_000 });
     try {
-      phase(`${label}: preparing dependencies`);
-      await ensureDeps({ cfg, wt, live, log: note });
-
-      phase(`${label}: building Storybook`);
-      const out = path.resolve(wt.cwd, cfg.branches?.output ?? '.kitsune-storybook');
-      const command = (cfg.branches?.buildCommand ?? defaultBuildCommand(wt.cwd)).replaceAll('{out}', quote(out));
-      await runShell(command, { cwd: wt.cwd, onLine: note });
-      if (!fs.existsSync(out)) throw new Error(`The build finished but ${path.relative(wt.cwd, out)} was not created. Set branches.output or branches.buildCommand.`);
-
-      phase(`${label}: taking screenshots`);
-      const branchCfg = { ...cfg, storybook: { ...cfg.storybook, url: null, dir: out } };
-      const store = { newFile: (key) => path.join(dir, `${key}.png`) };
-      const { captured } = await capture(branchCfg, store, {
-        log: note,
-        progress: (done, total) => Object.assign(job, { done, total }),
+      return await withBuiltStorybook(cfg, sha, { cwd: live.cwd, label, note, phase }, async ({ out }) => {
+        phase(`${label}: taking screenshots`);
+        const branchCfg = { ...cfg, storybook: { ...cfg.storybook, url: null, dir: out } };
+        const store = { newFile: (key) => path.join(dir, `${key}.png`) };
+        const { captured } = await capture(branchCfg, store, {
+          log: note,
+          progress: (done, total) => Object.assign(job, { done, total }),
+        });
+        const entries = captured.map((r) => ({
+          key: r.key,
+          story: r.story,
+          viewport: r.viewport.name,
+          browser: r.browser.name,
+          ok: r.ok,
+          error: r.error,
+        }));
+        fs.writeFileSync(metaFile, JSON.stringify(entries)); // written last: its presence marks the cache entry complete
+        return { dir, entries };
       });
-      const entries = captured.map((r) => ({
-        key: r.key,
-        story: r.story,
-        viewport: r.viewport.name,
-        browser: r.browser.name,
-        ok: r.ok,
-        error: r.error,
-      }));
-      fs.writeFileSync(metaFile, JSON.stringify(entries)); // written last: its presence marks the cache entry complete
-      return { dir, entries };
     } catch (err) {
       fs.rmSync(dir, { recursive: true, force: true });
       throw err;
-    } finally {
-      await git(['worktree', 'remove', '--force', wtRoot], { cwd: live.root }).catch(() => {});
-      fs.rmSync(wtRoot, { recursive: true, force: true });
-      await git(['worktree', 'prune'], { cwd: live.root }).catch(() => {});
     }
   }
 

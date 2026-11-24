@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **`kitsune worker`: builds requests for you.** Run it on any machine that has the repository (a build box or a laptop). It watches the shared server for open requests, fetches the branch, builds Storybook in a throw-away worktree, runs the check, uploads it and moves the request to in review. If the build fails, the request goes back to the contributor with the reason (new `buildFailed` step, also a Cliq alert). Needs `KITSUNE_REVIEW_TOKEN` (an admin's personal token) and `KITSUNE_UPLOAD_TOKEN`.
 - **Four eyes on request approval.** Whoever sent a request or built it (started or finished the build) cannot approve it; another reviewer or admin has to. Asking for changes or rejecting is still allowed. The dashboard hides the Approve button and says why. One-person teams can switch it off with `KITSUNE_ALLOW_SELF_APPROVAL=1`.
 
 ### Docs

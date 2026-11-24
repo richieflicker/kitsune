@@ -239,6 +239,34 @@ export async function main(argv) {
     });
 
   program
+    .command('worker')
+    .description('Build review requests automatically: fetch the branch, build Storybook, check, upload, and hand the request to reviewers')
+    .requiredOption('--server <url>', 'the shared review server')
+    .option('--once', 'handle what is waiting, then exit')
+    .option('--interval <seconds>', 'how often to look for new requests', '30')
+    .action(async (opts) => {
+      const cfg = await cfgOf();
+      const { runWorker } = await import('./worker.js');
+      const ctl = new AbortController();
+      process.on('SIGINT', () => ctl.abort());
+      process.on('SIGTERM', () => ctl.abort());
+      try {
+        await runWorker({
+          server: opts.server,
+          reviewToken: process.env.KITSUNE_REVIEW_TOKEN,
+          uploadToken: process.env.KITSUNE_UPLOAD_TOKEN,
+          cfg,
+          once: Boolean(opts.once),
+          interval: Math.max(Number(opts.interval) || 30, 5),
+          signal: ctl.signal,
+        });
+      } catch (err) {
+        console.error(`error: ${err.message}`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
     .command('serve')
     .description('Open the local review dashboard')
     .option('-p, --port <port>', 'port')
