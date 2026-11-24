@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 ### Added
 - **Branch dropdowns on the request form.** The worker reports the branches on `origin`; the form offers *Your branch* and *Merge into* as selects, shows the branch's newest commit and how far ahead it is, and has a **Fetch** button that makes the worker run `git fetch`. No commit to type, and no Bitbucket token: the worker uses the git access its machine already has. New API: `GET /api/v1/branches`, `POST /api/v1/branches/refresh`, `PUT /api/v1/worker/branches`; a request can be created without `sha`.
